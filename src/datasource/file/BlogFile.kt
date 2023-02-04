@@ -41,7 +41,7 @@ fun ingestFiles(rootPath: String, docCache: DocumentCache): Pair<List<IngestedFi
 
     moveMediaFiles(mediaFiles, rootPath, lengthPrefix)
     ingestScripts(scriptNames, rootPath, docCache, false)
-    moveDocs(docFiles, rootPath, Constant.docsSubfolder)
+    moveDocs(docFiles, rootPath, Constant.ingestSubfolder, Constant.docsSubfolder)
 
     return Pair(docFiles, ingestedCore)
 }
@@ -127,8 +127,8 @@ private fun moveMediaFiles(mediaFiles: HashSet<String>, rootPath: String, length
 private fun ingestScripts(scriptNames: List<String>, rootPath: String, docCache: DocumentCache, isGlobal: Boolean) {
     val targetPath = rootPath + Constant.scriptsSubfolder
     for (fN in scriptNames) {
-        val modId = if (isGlobal) { fN.substring(rootPath.length + Constant.ingestCoreSubfolder.length) }
-                             else { fN.substring(rootPath.length) }
+        val modId = if (isGlobal) { fN.substring(rootPath.length + Constant.ingestCoreSubfolder.length, fN.length - 4) }
+                             else { fN.substring(rootPath.length, fN.length - 4) }
 
         File(fN).let { sourceFile ->
             val nameWithVersion = docCache.insertModule(modId)
@@ -139,46 +139,39 @@ private fun ingestScripts(scriptNames: List<String>, rootPath: String, docCache:
 }
 
 /**
- * Updates the document stockpile on disk according to the list of intaken files.
+ * Updates the document stockpile on disk according to the list of ingested files.
  */
-private fun moveDocs(intakens: List<IngestedFile>, rootPath: String, targetSubfolder: String) {
+private fun moveDocs(intakens: List<IngestedFile>, rootPath: String, sourceSubfolder: String, targetSubfolder: String) {
     val targetPrefix = rootPath + targetSubfolder
     for (iFile in intakens) {
         when (iFile) {
             is IngestedFile.CreateUpdate -> {
-                val sourceFile = File(rootPath + Constant.ingestSubfolder
-                                      + File(iFile.fullPath) + ".html")
+                val sourceHtml = File(rootPath + sourceSubfolder + iFile.fullPath + ".html")
 
                 println("!!! trying to save file as ${targetPrefix + iFile.fullPath.replace(" ", "")
                         + ".html"}")
 
-                val fTarget = File(targetPrefix + iFile.fullPath.replace(" ", "")
-                                    + ".html")
+                val fTarget = File(targetPrefix + iFile.fullPath.replace(" ", "") + ".html")
                 if (fTarget.exists()) { fTarget.delete() }
                 fTarget.parentFile.mkdirs()
                 fTarget.writeText(iFile.content)
 
-                val fStyleTarget = File(targetPrefix + iFile.fullPath.replace(" ", "")
-                                        + ".css")
+                val fStyleTarget = File(targetPrefix + iFile.fullPath.replace(" ", "") + ".css")
                 if (fStyleTarget.exists()) { fStyleTarget.delete() }
                 if (iFile.styleContent != "") {
                     fStyleTarget.parentFile.mkdirs()
                     fStyleTarget.writeText(iFile.styleContent)
                 }
 
-                //sourceFile.copyTo(File(fNTarget))
-                if (sourceFile.exists()) { sourceFile.delete() }
+                if (sourceHtml.exists()) { sourceHtml.delete() }
             }
             is IngestedFile.Delete -> {
-                val sourceFile = File(rootPath + Constant.ingestSubfolder
-                        + File(iFile.fullPath) + ".html")
+                val sourceFile = File(rootPath + Constant.ingestSubfolder + iFile.fullPath + ".html")
 
-                val fNTarget = File(targetPrefix + iFile.fullPath.replace(" ", "")
-                                    + ".html")
+                val fNTarget = File(targetPrefix + iFile.fullPath.replace(" ", "") + ".html")
                 if (fNTarget.exists()) fNTarget.delete()
 
-                val fNStyleTarget = targetPrefix + iFile.fullPath.replace(" ", "") +
-                                    ".css"
+                val fNStyleTarget = targetPrefix + iFile.fullPath.replace(" ", "") + ".css"
                 if (File(fNStyleTarget).exists()) { File(fNStyleTarget).delete() }
 
                 if (sourceFile.exists()) { sourceFile.delete() }
@@ -262,7 +255,7 @@ private fun ingestCoreFiles(rootPath: String, intakeCorePath: String, docCache: 
     val js = moveFile(intakeCorePath, rootPath + Constant.coreSubfolder, "core.js")
     val css = moveFile(intakeCorePath, rootPath + Constant.coreSubfolder, "core.css")
     val mediaFiles = HashSet<String>(10)
-    val intakenCoreHtml = ArrayList<IngestedFile>(3)
+    val ingestedCoreHtml = ArrayList<IngestedFile>(3)
 
     val fileNotFound = File(intakeCorePath + "notFound.html")
     val fileFooter = File(intakeCorePath + "footer.html")
@@ -275,19 +268,19 @@ private fun ingestCoreFiles(rootPath: String, intakeCorePath: String, docCache: 
 
     if (fileNotFound.exists()) {
         htmlNotFound = ingestDoc(fileNotFound, intakeCorePath, mediaFiles)
-        intakenCoreHtml.add(htmlNotFound)
+        ingestedCoreHtml.add(htmlNotFound)
     }
     if (fileFooter.exists()) {
         htmlFooter = ingestDoc(fileFooter, intakeCorePath, mediaFiles)
-        intakenCoreHtml.add(htmlFooter)
+        ingestedCoreHtml.add(htmlFooter)
     }
     if (fileBasePage.exists()) {
         htmlBasePage = ingestDoc(fileBasePage, intakeCorePath, mediaFiles)
-        intakenCoreHtml.add(htmlBasePage)
+        ingestedCoreHtml.add(htmlBasePage)
     }
     if (fileTerms.exists()) {
         htmlTermsUse = ingestDoc(fileTerms, intakeCorePath, mediaFiles)
-        intakenCoreHtml.add(htmlTermsUse)
+        ingestedCoreHtml.add(htmlTermsUse)
     }
 
     val arrFiles: FileTreeWalk = File(intakeCorePath).walk()
@@ -300,7 +293,7 @@ private fun ingestCoreFiles(rootPath: String, intakeCorePath: String, docCache: 
 
     moveMediaFiles(mediaFiles, rootPath, lengthPrefix)
     ingestScripts(scriptNames, rootPath, docCache, true)
-    moveDocs(intakenCoreHtml, rootPath, Constant.coreSubfolder)
+    moveDocs(ingestedCoreHtml, rootPath, Constant.ingestCoreSubfolder, Constant.coreSubfolder)
 
     return IngestedCore(js, css, htmlNotFound, htmlFooter, htmlBasePage, htmlTermsUse)
 }
@@ -314,9 +307,10 @@ private fun moveFile(sourcePath: String, targetPath: String, fNShort: String): S
         val fTarget = File(targetPath + fNShort)
         if (fTarget.exists()) {
             fTarget.delete()
-            fTarget.parentFile.mkdirs()
-            fTarget.writeText(result)
         }
+        fTarget.parentFile.mkdirs()
+        fTarget.writeText(result)
+        file.delete()
     }
     return result
 }
