@@ -1,10 +1,9 @@
 package tech.sozonov.blog.core
 import tech.sozonov.blog.datasource.file.BlogFile
-import tech.sozonov.blog.datasource.file.IntakenFile
+import tech.sozonov.blog.datasource.file.IngestedFile
 import tech.sozonov.blog.utils.*
 import java.time.LocalDateTime
 import java.util.*
-import kotlin.Triple
 import kotlin.collections.HashMap
 
 
@@ -35,16 +34,16 @@ class DocumentCache {
         this.cache[path] = newDocument
     }
 
-
     /**
      * Loads/reloads a set files and their contents into the cache.
      * Strips HTML outside the <body> tag so that only the relevant contents make it into the cache.
      */
     fun ingestAndRefresh(rootPath: String) {
         if (cache.isEmpty()) {
-            BlogFile.readAllDocs(rootPath, this)
-            BlogFile.readAllCore(rootPath, this)
+            BlogFile.readCachedDocs(rootPath, this)
+            BlogFile.readCachedCore(rootPath, this)
         }
+
         println("ingesting and refreshing at root path $rootPath")
         val (ingestedDocs, ingestedCore) = BlogFile.ingestFiles(rootPath)
 
@@ -52,13 +51,13 @@ class DocumentCache {
             for (i in ingestedDocs.indices) {
                 val inFile = ingestedDocs[i]
                 when (inFile) {
-                    is IntakenFile.CreateUpdate -> {
+                    is IngestedFile.CreateUpdate -> {
                         val key = inFile.fullPath.lowercase().replace(" ", "")
                         cache[key] = Document(inFile.content, inFile.styleContent,
                                               inFile.fullPath.replace(" ", ""),
                                               inFile.modifTime, -1, false)
                     }
-                    is IntakenFile.Delete -> {
+                    is IngestedFile.Delete -> {
                         val key = inFile.fullPath.lowercase().replace(" ", "")
                         if (cache.containsKey(key)) {
                             cache.remove(key)
@@ -76,7 +75,6 @@ class DocumentCache {
         this.termsOfUse = coreDocFromIngested(ingestedCore.htmlTermsUse)
     }
 
-
     /**
      * Returns an array of [(original path) date] useful for constructing navigation trees.
      */
@@ -88,7 +86,6 @@ class DocumentCache {
         return result
     }
 
-
     /**
      * Gets the list of all documents without wasAddedDB flag.
      */
@@ -97,8 +94,8 @@ class DocumentCache {
     }
 
 
-    private fun coreDocFromIngested(intaken: IntakenFile?): Document {
-        return if (intaken != null && intaken is IntakenFile.CreateUpdate) {
+    private fun coreDocFromIngested(intaken: IngestedFile?): Document {
+        return if (intaken != null && intaken is IngestedFile.CreateUpdate) {
             Document(
                     intaken.content,
                     intaken.styleContent,
