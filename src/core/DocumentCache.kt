@@ -9,14 +9,40 @@ import kotlin.collections.HashMap
 
 class DocumentCache {
     private val cache: HashMap<String, Document> = HashMap()
+    /** Cache of modules and their current versions */
+    private val scriptCache: HashMap<String, Int> = HashMap()
     var coreJS: String = ""
     var coreCSS: String = ""
-    var notFound: Document = Document("", "", "", LocalDateTime.MIN, 0, false)
-    var footer: Document = Document("", "", "", LocalDateTime.MIN, 0, false)
-    var rootPage: Document = Document("", "", "", LocalDateTime.MIN, 0, false)
-    var termsOfUse: Document = Document("", "", "", LocalDateTime.MIN, 0, false)
+    var notFound: Document = Document("", mutableListOf(), "", "", LocalDateTime.MIN, 0, false)
+    var footer: Document = Document("", mutableListOf(),"", "", LocalDateTime.MIN, 0, false)
+    var rootPage: Document = Document("", mutableListOf(),"", "", LocalDateTime.MIN, 0, false)
+    var termsOfUse: Document = Document("", mutableListOf(),"", "", LocalDateTime.MIN, 0, false)
+
     companion object {
-        private val emptyDocument = Document("", "", "", LocalDateTime.MIN, 0, false)
+        private val emptyDocument = Document("", mutableListOf(),"", "", LocalDateTime.MIN, 0, false)
+    }
+
+
+    fun getModule(modId: String): String? {
+        if (scriptCache.containsKey(modId)) {
+            return modId + "-" + (scriptCache[modId]!!) + ".mjs"
+        }
+        return null
+    }
+
+    /** This method should be called inside a synchronized block.
+     * It adds a new script module to the cache, or updates and increments its version if it already existed.
+     */
+    fun insertModule(modId: String): String {
+        val newVersion = if (scriptCache.containsKey(modId)) {
+            val newV = scriptCache[modId]!! + 1
+            scriptCache[modId] = newV
+            newV
+        } else {
+            scriptCache[modId] = 1
+            1
+        }
+        return "$modId-$newVersion.mjs"
     }
 
 
@@ -40,12 +66,15 @@ class DocumentCache {
      */
     fun ingestAndRefresh(rootPath: String) {
         if (cache.isEmpty()) {
-            BlogFile.readCachedDocs(rootPath, this)
+            // The order must be this: first read the core stuff, then the scripts, then the docs
+            // This is because core stuff is not overwritten by scripts, and docs depend on scripts and core
             BlogFile.readCachedCore(rootPath, this)
+            BlogFile.readCachedScripts(rootPath, this)
+            BlogFile.readCachedDocs(rootPath, this)
         }
 
         println("ingesting and refreshing at root path $rootPath")
-        val (ingestedDocs, ingestedCore) = BlogFile.ingestFiles(rootPath)
+        val (ingestedDocs, ingestedCore) = BlogFile.ingestFiles(rootPath, this)
 
         if (!ingestedDocs.isEmpty()) {
             for (i in ingestedDocs.indices) {
@@ -53,7 +82,7 @@ class DocumentCache {
                 when (inFile) {
                     is IngestedFile.CreateUpdate -> {
                         val key = inFile.fullPath.lowercase().replace(" ", "")
-                        cache[key] = Document(inFile.content, inFile.styleContent,
+                        cache[key] = Document(inFile.content, inFile.jsModules, inFile.styleContent,
                                               inFile.fullPath.replace(" ", ""),
                                               inFile.modifTime, -1, false)
                     }
@@ -97,7 +126,7 @@ class DocumentCache {
     private fun coreDocFromIngested(intaken: IngestedFile?): Document {
         return if (intaken != null && intaken is IngestedFile.CreateUpdate) {
             Document(
-                    intaken.content,
+                    intaken.content, intaken.jsModules,
                     intaken.styleContent,
                     "",
                     intaken.modifTime, -1, false)
@@ -108,5 +137,5 @@ class DocumentCache {
 }
 
 
-data class Document(val content: String, val contentStyle: String, val pathCaseSen: String,
-                    val modifiedDate: LocalDateTime, var pageId: Int, var wasAddedDB: Boolean)
+data class Document(val content: String, val scriptDeps: List<String>, val contentStyle: String,
+                    val pathCaseSen: String, val modifiedDate: LocalDateTime, var pageId: Int, var wasAddedDB: Boolean)

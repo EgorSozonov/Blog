@@ -98,7 +98,7 @@ function populateMenu(isFirstLoad) {
         if (listOpen[i][1].length == 0) {
             if (i == indLast && leafMode === true) {
                 let child = document.createElement('div')
-                child.style.border = "1px solid #C0FF00"
+                child.style.border = "1px solid hsl(75, 100%, 50%)"
                 const displayedName = displayLeaf(listOpen[i][0])
                 let par = document.createElement('p')
                 par.innerHTML = displayedName

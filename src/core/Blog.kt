@@ -20,7 +20,7 @@ private val dateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy
 
 //region GetResponse
 
-suspend fun buildGetResponse(subUrl: String, queryParams: List<Pair<String, String>>): String {
+fun buildGetResponse(subUrl: String, queryParams: List<Pair<String, String>>): String {
     try {
         val documentContent = if (subUrl.isEmpty()) {
             docCache.rootPage
@@ -34,7 +34,6 @@ suspend fun buildGetResponse(subUrl: String, queryParams: List<Pair<String, Stri
 
         checkNUpdate(this, rootPath)
 
-
         val navTree = if (modeTemporal) {
             navTime
         } else {
@@ -47,6 +46,12 @@ suspend fun buildGetResponse(subUrl: String, queryParams: List<Pair<String, Stri
             val navString = templateNav(navTopic, navTime)
             printDeviceMeta(::append)
             printStylePart(documentContent, this@Blog, ::append)
+
+            for (scriptDep in documentContent.scriptDeps) {
+                val scriptModule = docCache.getModule(scriptDep) ?: return ""
+                append("""<script type="module" src="${Constant.appSubfolder}${Constant.scriptsSubfolder}$scriptModule"/>""")
+                append("\n")
+            }
 
             val breadCrumbs = navTree.mkBreadcrumbs(subUrl).joinToString(", ")
             printScriptPart(navString, breadCrumbs, modeTemporal, this@Blog, ::append)
@@ -116,7 +121,7 @@ suspend fun build404Response(webExchange: ApplicationCall) {
 private fun checkNUpdate(self: Blog, rootPath: String){ //, conn: Connection) {
     val dtNow = LocalDateTime.now()
     val dur = Duration.between(self.dtNavUpdated, dtNow)
-    if (dur.toMinutes() <= 5) { return }
+    if (dur.toSeconds() <= 5) { return }
 
     synchronized(self) {
         self.docCache.ingestAndRefresh(rootPath)

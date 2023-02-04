@@ -21,8 +21,9 @@ fun Application.module() {
 
 
 fun Application.configureRouting() {
-    val mediaUrl = "/" + Constant.appSubfolder + Constant.mediaSubfolder
     val mainUrl = "/" + Constant.appSubfolder + "{subUrl...}"
+    val mediaUrl = "/" + Constant.appSubfolder + Constant.mediaSubfolder
+    val scriptUrl = "/" + Constant.appSubfolder + Constant.scriptsSubfolder
 
     routing {
         trace { application.log.trace(it.buildText()) }
@@ -38,6 +39,10 @@ fun Application.configureRouting() {
         }
         static(mediaUrl) {
             this.staticRootFolder = File(Blog.rootPath + Constant.mediaSubfolder)
+            files(".")
+        }
+        static(scriptUrl) {
+            this.staticRootFolder = File(Blog.rootPath + Constant.scriptsSubfolder)
             files(".")
         }
     }
