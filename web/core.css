@@ -128,10 +128,9 @@ body {
 }
 
 .__sortingBorder {
-    border-bottom-style: solid;
-    border-bottom-width: 1px;
+    border-style: solid;
+    border-width: 1px;
 }
-
 
 #__menuOpener {
     left: 20px;

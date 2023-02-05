@@ -49,7 +49,7 @@ object BlogTemplate {
 
             <div class="__divider" id="__divider" onClick="toggleNavBar();">&lt;</div>
             <div class="__menuToggler __hidden" id="__menuToggler">
-                <div class="__svgButton" style="text-align: center;" title="Temporal sorting">                   
+                <div class="__svgButton" style="text-align: center;" title="Open menu">                   
                         <a onclick="toggleNavBar(); return false;"> 
                             <svg class="__swell" width="20" height="20" viewBox="0 0 100 100">
                                 <circle r="48" cx="50" cy="50"></circle>

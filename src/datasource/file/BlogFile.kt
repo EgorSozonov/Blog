@@ -6,6 +6,8 @@ import tech.sozonov.blog.utils.pathize
 import java.io.BufferedReader
 import java.io.File
 import java.io.StringReader
+import java.nio.file.Files
+import java.nio.file.Path
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -132,6 +134,8 @@ private fun ingestDoc(file: File, ingestPath: String, mediaFiles: HashSet<String
  */
 private fun ingestScripts(scriptNames: List<String>, rootPath: String, docCache: DocumentCache, isGlobal: Boolean) {
     val targetPath = rootPath + Constant.scriptsSubfolder
+    Files.createDirectories(Path.of(targetPath))
+
     val prefixLength = rootPath.length + (if (isGlobal) {Constant.ingestCoreSubfolder.length} else {Constant.ingestSubfolder.length})
     for (fN in scriptNames) {
         // -3 for the ".js"
@@ -152,9 +156,16 @@ private fun ingestScripts(scriptNames: List<String>, rootPath: String, docCache:
 
             docCache.insertModule(modId)
             val targetFile = File(targetPath + modId + ".js")
+
 //            if (targetFile.exists()) {
 //                targetFile.delete()
 //            }
+            if (subfolder.length > 0) {
+                Files.createDirectories(Path.of(targetPath + subfolder))
+            } else {
+                Files.createDirectories(Path.of(targetPath + Constant.scriptsGlobalSubfolder))
+            }
+
             targetFile.writeText(rewrittenContent)
             sourceFile.delete()
         }
