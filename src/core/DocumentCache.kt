@@ -30,10 +30,14 @@ class DocumentCache {
         return null
     }
 
+    fun insertModule(modId: String, version: Int) {
+        scriptCache[modId] = version
+    }
+
     /** This method should be called inside a synchronized block.
      * It adds a new script module to the cache, or updates and increments its version if it already existed.
      */
-    fun insertModule(modId: String): String {
+    fun updateModule(modId: String): String {
         val newVersion = if (scriptCache.containsKey(modId)) {
             val newV = scriptCache[modId]!! + 1
             scriptCache[modId] = newV
@@ -98,10 +102,10 @@ class DocumentCache {
 
         if (ingestedCore.js != "") this.coreJS = ingestedCore.js
         if (ingestedCore.css != "") this.coreCSS = ingestedCore.css
-        this.notFound = coreDocFromIngested(ingestedCore.htmlNotFound)
-        this.rootPage = coreDocFromIngested(ingestedCore.htmlRoot)
-        this.footer = coreDocFromIngested(ingestedCore.htmlFooter)
-        this.termsOfUse = coreDocFromIngested(ingestedCore.htmlTermsUse)
+        this.notFound = updateCoreDocFromIngested(ingestedCore.htmlNotFound, this.notFound)
+        this.rootPage = updateCoreDocFromIngested(ingestedCore.htmlRoot, this.rootPage)
+        this.footer = updateCoreDocFromIngested(ingestedCore.htmlFooter, this.footer)
+        this.termsOfUse = updateCoreDocFromIngested(ingestedCore.htmlTermsUse, this.termsOfUse)
     }
 
     /**
@@ -123,7 +127,8 @@ class DocumentCache {
     }
 
 
-    private fun coreDocFromIngested(intaken: IngestedFile?): Document {
+    /** Updates core HTML docs from ingested files. They are never deleted, only updated. */
+    private fun updateCoreDocFromIngested(intaken: IngestedFile?, existing: Document): Document {
         return if (intaken != null && intaken is IngestedFile.CreateUpdate) {
             Document(
                     intaken.content, intaken.jsModules,
@@ -131,7 +136,7 @@ class DocumentCache {
                     "",
                     intaken.modifTime, -1, false)
         } else {
-            emptyDocument
+            existing
         }
     }
 }

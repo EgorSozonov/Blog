@@ -46,214 +46,13 @@ fun ingestFiles(rootPath: String, docCache: DocumentCache): Pair<List<IngestedFi
     return Pair(docFiles, ingestedCore)
 }
 
-/**
- * Performs ingestion of an input file: reads its contents, detects referenced
- * media files and script modules, rewrites the links to them, and decides whether this is an update/new doc or
- * a delete.
- */
-private fun ingestDoc(file: File, ingestPath: String, mediaFiles: HashSet<String>): IngestedFile {
-    val lastModified = file.lastModified()
-    val dateLastModified = LocalDateTime.ofInstant(
-        Instant.ofEpochMilli(lastModified), ZoneOffset.UTC
-    )
-    val indLastPeriod = file.path.lastIndexOf('.')
-    val fileSubpath = file.path.substring(ingestPath.length, indLastPeriod) // "topic/subt/file" without the extension
-    val indLastSlash = file.path.lastIndexOf('/')
-    val fileSubfolder =  file.path.substring(ingestPath.length, indLastSlash + 1) // "topic/subt/"
-    val fileContent = file.readText()
-    val (content, styleContent) = getHTMLBodyStyle(fileContent, ingestPath, fileSubpath, mediaFiles)
-    if (content.length < 10 && content.trim() == "") {
-        return IngestedFile.Delete(fileSubpath)
-    }
-
-    val jsModuleNames = getJSModuleNames(fileContent, fileSubfolder)
-
-    return IngestedFile.CreateUpdate(
-            fileSubpath,
-            content, styleContent,
-            dateLastModified, jsModuleNames)
-}
-
-fun getJSModuleNames(fileContent: String, fileSubfolder: String): List<String> {
-    val result = mutableListOf<String>()
-    val headStart = fileContent.indexOf("<head>", 0, true)
-    if (headStart < 0) return result
-
-    val headEnd = fileContent.indexOf("</head>", headStart, true)
-    if (headEnd < 0) return result
-
-    val headString = fileContent.substring(headStart + 5, headEnd)
-    var i = 0
-    while (true) {
-        i = headString.indexOf("<script", i, true)
-        if (i < 0) break
-        i += 7
-
-        val j = headString.indexOf(">", i, true)
-        val spl = headString.substring(i, j).split(" ")
-
-        val srcString = spl.firstOrNull { it.startsWith("src=\"") } ?: continue
-
-        val mjs = srcString.indexOf(".mjs", 5, true) // 5 for `src="`
-        if (mjs < 0) continue
-
-        val rawModuleName = srcString.substring(5, mjs)
-        if (rawModuleName.startsWith("./")) { // adjacent file
-            result.add(fileSubfolder + rawModuleName.substring(2))
-        } else { // global script module
-            result.add(rawModuleName)
-        }
-    }
-    return result
-}
-
-/**
- * Moves media files references to which were detected to the /_media subfolder.
- */
-private fun moveMediaFiles(mediaFiles: HashSet<String>, rootPath: String, lengthPrefix: Int,
-                   targetSubFolder: String = "") {
-    val targetPath = rootPath + Constant.mediaSubfolder + targetSubFolder
-    for (fN in mediaFiles) {
-        File(fN).let { sourceFile ->
-            sourceFile.copyTo(File(targetPath + fN.substring(lengthPrefix)))
-            sourceFile.delete()
-        }
-    }
-}
-
-/**
- * Ingests script module files, updates their versions, determines their filenames, and puts them into the cache folder.
- */
-private fun ingestScripts(scriptNames: List<String>, rootPath: String, docCache: DocumentCache, isGlobal: Boolean) {
-    val targetPath = rootPath + Constant.scriptsSubfolder
-    for (fN in scriptNames) {
-        val modId = if (isGlobal) { fN.substring(rootPath.length + Constant.ingestCoreSubfolder.length, fN.length - 4) }
-                             else { fN.substring(rootPath.length, fN.length - 4) }
-
-        File(fN).let { sourceFile ->
-            val nameWithVersion = docCache.insertModule(modId)
-            sourceFile.copyTo(File(targetPath + nameWithVersion))
-            sourceFile.delete()
-        }
-    }
-}
-
-/**
- * Updates the document stockpile on disk according to the list of ingested files.
- */
-private fun moveDocs(intakens: List<IngestedFile>, rootPath: String, sourceSubfolder: String, targetSubfolder: String) {
-    val targetPrefix = rootPath + targetSubfolder
-    for (iFile in intakens) {
-        when (iFile) {
-            is IngestedFile.CreateUpdate -> {
-                val sourceHtml = File(rootPath + sourceSubfolder + iFile.fullPath + ".html")
-
-                println("!!! trying to save file as ${targetPrefix + iFile.fullPath.replace(" ", "")
-                        + ".html"}")
-
-                val fTarget = File(targetPrefix + iFile.fullPath.replace(" ", "") + ".html")
-                if (fTarget.exists()) { fTarget.delete() }
-                fTarget.parentFile.mkdirs()
-                fTarget.writeText(iFile.content)
-
-                val fStyleTarget = File(targetPrefix + iFile.fullPath.replace(" ", "") + ".css")
-                if (fStyleTarget.exists()) { fStyleTarget.delete() }
-                if (iFile.styleContent != "") {
-                    fStyleTarget.parentFile.mkdirs()
-                    fStyleTarget.writeText(iFile.styleContent)
-                }
-
-                if (sourceHtml.exists()) { sourceHtml.delete() }
-            }
-            is IngestedFile.Delete -> {
-                val sourceFile = File(rootPath + Constant.ingestSubfolder + iFile.fullPath + ".html")
-
-                val fNTarget = File(targetPrefix + iFile.fullPath.replace(" ", "") + ".html")
-                if (fNTarget.exists()) fNTarget.delete()
-
-                val fNStyleTarget = targetPrefix + iFile.fullPath.replace(" ", "") + ".css"
-                if (File(fNStyleTarget).exists()) { File(fNStyleTarget).delete() }
-
-                if (sourceFile.exists()) { sourceFile.delete() }
-            }
-        }
-    }
-}
-
-
-fun readCachedDocs(rootPath: String, cache: DocumentCache) {
-    val intakeDirN = rootPath + Constant.docsSubfolder
-    val intakeDir = File(intakeDirN)
-    val prefixLength = intakeDirN.length
-    val arrFiles: FileTreeWalk = intakeDir.walk()
-
-    val fileList = arrFiles.filter { file -> file.isFile && file.name.endsWith(".html")
-            && file.name.length > 5 && file.length() < 2000000 }
-            .toList()
-    fileList.forEach {
-        val address = it.path.substring(prefixLength, it.path.length - 5)
-        val doc = Document(it.readText(), mutableListOf(), "", address,
-                           LocalDateTime.ofInstant(
-                               Instant.ofEpochMilli(it.lastModified()),
-                               ZoneId.systemDefault()),
-                           -1, false)
-        cache.addDocument(address, doc) }
-}
-
-
-fun readCachedCore(rootPath: String, cache: DocumentCache) {
-    val intakeDirN = rootPath + Constant.coreSubfolder
-
-    val fileJs = File(intakeDirN + "core.js")
-    if (fileJs.exists()) { cache.coreJS = fileJs.readText() }
-
-    val fileHtmlNotFound = File(intakeDirN + "notFound.html")
-    if (fileHtmlNotFound.exists()) {
-        cache.notFound = Document(fileHtmlNotFound.readText(), mutableListOf(),
-                                  "", "", LocalDateTime.MIN, -1, false)
-    }
-
-    val fileHtmlFooter = File(intakeDirN + "footer.html")
-    if (fileHtmlFooter.exists()) {
-        cache.footer = Document(fileHtmlFooter.readText(), mutableListOf(),
-                                "", "", LocalDateTime.MIN, -1, false)
-    }
-
-    val fileHtmlTermsUse = File(intakeDirN + "termsOfUse.html")
-    if (fileHtmlTermsUse.exists()) {
-        cache.termsOfUse = Document(fileHtmlTermsUse.readText(), mutableListOf(),
-                "", "", LocalDateTime.MIN, -1, false)
-    }
-
-    val fileCss = File(intakeDirN + "core.css")
-    if (fileCss.exists()) { cache.coreCSS = fileCss.readText() }
-}
-
-
-fun readCachedScripts(rootPath: String, cache: DocumentCache) {
-    val intakeDirN = rootPath + Constant.docsSubfolder
-    val intakeDir = File(intakeDirN)
-    val prefixLength = intakeDirN.length
-    val arrFiles: FileTreeWalk = intakeDir.walk()
-
-    val fileList = arrFiles.filter { file -> file.isFile && file.name.endsWith(".mjs")
-                                    && file.name.length > 5 && file.length() < 500000 }
-                           .toList()
-    fileList.forEach {
-        val address = it.path.substring(prefixLength, it.path.length - 5)
-        val doc = Document(it.readText(), mutableListOf(), "", address,
-            LocalDateTime.ofInstant(
-                Instant.ofEpochMilli(it.lastModified()),
-                ZoneId.systemDefault()),
-            -1, false)
-        cache.addDocument(address, doc) }
-}
-
 
 private fun ingestCoreFiles(rootPath: String, intakeCorePath: String, docCache: DocumentCache, lengthPrefix: Int):
         IngestedCore {
     val js = moveFile(intakeCorePath, rootPath + Constant.coreSubfolder, "core.js")
     val css = moveFile(intakeCorePath, rootPath + Constant.coreSubfolder, "core.css")
+    val favicon = moveFile(intakeCorePath, rootPath + Constant.mediaSubfolder, "favicon.ico")
+
     val mediaFiles = HashSet<String>(10)
     val ingestedCoreHtml = ArrayList<IngestedFile>(3)
 
@@ -298,6 +97,236 @@ private fun ingestCoreFiles(rootPath: String, intakeCorePath: String, docCache: 
     return IngestedCore(js, css, htmlNotFound, htmlFooter, htmlBasePage, htmlTermsUse)
 }
 
+/**
+ * Performs ingestion of an input file: reads its contents, detects referenced
+ * media files and script modules, rewrites the links to them, and decides whether this is an update/new doc or
+ * a delete.
+ */
+private fun ingestDoc(file: File, ingestPath: String, mediaFiles: HashSet<String>): IngestedFile {
+    val lastModified = file.lastModified()
+    val dateLastModified = LocalDateTime.ofInstant(
+        Instant.ofEpochMilli(lastModified), ZoneOffset.UTC
+    )
+    val indLastPeriod = file.path.lastIndexOf('.')
+    val fileSubpath = file.path.substring(ingestPath.length, indLastPeriod) // "topic/subt/file" without the extension
+    val indLastSlash = file.path.lastIndexOf('/')
+    val fileSubfolder =  file.path.substring(ingestPath.length, indLastSlash + 1) // "topic/subt/"
+    val fileContent = file.readText()
+    val (content, styleContent) = getHTMLBodyStyle(fileContent, ingestPath, fileSubpath, mediaFiles)
+    if (content.length < 10 && content.trim() == "") {
+        return IngestedFile.Delete(fileSubpath)
+    }
+
+    val jsModuleNames = parseJSModuleNames(fileContent, fileSubfolder)
+
+    return IngestedFile.CreateUpdate(
+            fileSubpath,
+            content, styleContent,
+            dateLastModified, jsModuleNames)
+}
+
+/**
+ * Ingests script module files, updates their versions, determines their filenames, and puts them into the cache folder.
+ */
+private fun ingestScripts(scriptNames: List<String>, rootPath: String, docCache: DocumentCache, isGlobal: Boolean) {
+    val targetPath = rootPath + Constant.scriptsSubfolder
+    for (fN in scriptNames) {
+        val modId = if (isGlobal) { fN.substring(rootPath.length + Constant.ingestCoreSubfolder.length, fN.length - 4) }
+        else { fN.substring(rootPath.length + Constant.ingestSubfolder.length, fN.length - 4) }
+
+        File(fN).let { sourceFile ->
+            val nameWithVersion = docCache.updateModule(modId)
+            sourceFile.copyTo(File(targetPath + nameWithVersion))
+            sourceFile.delete()
+        }
+    }
+}
+
+
+fun parseJSModuleNames(fileContent: String, fileSubfolder: String): List<String> {
+    val result = mutableListOf<String>()
+    val headStart = fileContent.indexOf("<head>", 0, true)
+    if (headStart < 0) return result
+
+    val headEnd = fileContent.indexOf("</head>", headStart, true)
+    if (headEnd < 0) return result
+
+    val headString = fileContent.substring(headStart + 6, headEnd) // +6 for "<head>"
+    var i = 0
+    while (true) {
+        i = headString.indexOf("<script", i, true)
+        if (i < 0) break
+        i += 7 // +7 for the "<script"
+
+        val j = headString.indexOf(">", i, true)
+        val spl = headString.substring(i, j).split(" ")
+
+        val srcString = spl.firstOrNull { it.startsWith("src=\"") } ?: continue
+
+        val mjs = srcString.indexOf(".mjs", 5, true) // 5 for `src="`
+        if (mjs < 0) continue
+
+        val rawModuleName = srcString.substring(5, mjs)
+        if (rawModuleName.startsWith("./")) { // adjacent file
+            result.add(fileSubfolder + rawModuleName.substring(2))
+        } else { // global script module
+            result.add(rawModuleName)
+        }
+    }
+    return result
+}
+
+/**
+ * Moves media files references to which were detected to the /_m subfolder.
+ */
+private fun moveMediaFiles(mediaFiles: HashSet<String>, rootPath: String, lengthPrefix: Int,
+                   targetSubFolder: String = "") {
+    val targetPath = rootPath + Constant.mediaSubfolder + targetSubFolder
+    for (fN in mediaFiles) {
+        File(fN).let { sourceFile ->
+            val targetFile = File(targetPath + fN.substring(lengthPrefix))
+            if (targetFile.exists()) {
+                targetFile.delete()
+            }
+            sourceFile.copyTo(File(targetPath + fN.substring(lengthPrefix)))
+            sourceFile.delete()
+        }
+    }
+}
+
+/**
+ * Updates the document stockpile on disk according to the list of ingested files.
+ */
+private fun moveDocs(intakens: List<IngestedFile>, rootPath: String, sourceSubfolder: String, targetSubfolder: String) {
+    val targetPrefix = rootPath + targetSubfolder
+    for (iFile in intakens) {
+        when (iFile) {
+            is IngestedFile.CreateUpdate -> {
+                val sourceHtml = File(rootPath + sourceSubfolder + iFile.fullPath + ".html")
+
+                val fTarget = File(targetPrefix + iFile.fullPath.replace(" ", "") + ".html")
+                if (fTarget.exists()) { fTarget.delete() }
+                fTarget.parentFile.mkdirs()
+                fTarget.writeText(iFile.content)
+
+                val fStyleTarget = File(targetPrefix + iFile.fullPath.replace(" ", "") + ".css")
+                if (fStyleTarget.exists()) { fStyleTarget.delete() }
+                if (iFile.styleContent != "") {
+                    fStyleTarget.parentFile.mkdirs()
+                    fStyleTarget.writeText(iFile.styleContent)
+                }
+
+                if (iFile.jsModules.isNotEmpty()) {
+                    val depsTarget = File(targetPrefix + iFile.fullPath.replace(" ", "") + ".deps")
+                    if (depsTarget.exists()) { depsTarget.delete() }
+                    depsTarget.writeText(iFile.jsModules.joinToString("\n"))
+                }
+
+                if (sourceHtml.exists()) { sourceHtml.delete() }
+            }
+            is IngestedFile.Delete -> {
+                val sourceFile = File(rootPath + Constant.ingestSubfolder + iFile.fullPath + ".html")
+
+                val fNTarget = File(targetPrefix + iFile.fullPath.replace(" ", "") + ".html")
+                if (fNTarget.exists()) fNTarget.delete()
+
+                val fNStyleTarget = File(targetPrefix + iFile.fullPath.replace(" ", "") + ".css")
+                if (fNStyleTarget.exists()) { fNStyleTarget.delete() }
+
+                val depsTarget = File(targetPrefix + iFile.fullPath.replace(" ", "") + ".deps")
+                if (depsTarget.exists()) { depsTarget.delete() }
+
+                if (sourceFile.exists()) { sourceFile.delete() }
+            }
+        }
+    }
+}
+
+
+fun readCachedDocs(rootPath: String, cache: DocumentCache) {
+    val docsDirN = rootPath + Constant.docsSubfolder
+    val docsDir = File(docsDirN)
+    val prefixLength = docsDirN.length
+    val arrFiles: FileTreeWalk = docsDir.walk()
+    val emptyList = mutableListOf<String>()
+
+    val fileList = arrFiles.filter { file -> file.isFile && file.name.endsWith(".html")
+            && file.name.length > 5 && file.length() < 2000000 }
+            .toList()
+    fileList.forEach {
+        val address = it.path.substring(prefixLength, it.path.length - 5) // -5 for the ".html"
+        val depsFile = File("$docsDirN$address.deps")
+        val deps = if (depsFile.exists()) {
+            depsFile.readText().split("\n")
+        } else {
+            emptyList
+        }
+
+        val styleFile = File("$docsDirN$address.css")
+        val style = if (styleFile.exists()) {
+            styleFile.readText()
+        } else {
+            ""
+        }
+
+        val doc = Document(it.readText(), deps, style, address,
+                           LocalDateTime.ofInstant(
+                               Instant.ofEpochMilli(it.lastModified()),
+                               ZoneId.systemDefault()),
+                           -1, false)
+        cache.addDocument(address, doc) }
+}
+
+
+fun readCachedCore(rootPath: String, cache: DocumentCache) {
+    val intakeDirN = rootPath + Constant.coreSubfolder
+
+    val fileJs = File(intakeDirN + "core.js")
+    if (fileJs.exists()) { cache.coreJS = fileJs.readText() }
+
+    val fileHtmlNotFound = File(intakeDirN + "notFound.html")
+    if (fileHtmlNotFound.exists()) {
+        cache.notFound = Document(fileHtmlNotFound.readText(), mutableListOf(),
+                                  "", "", LocalDateTime.MIN, -1, false)
+    }
+
+    val fileHtmlFooter = File(intakeDirN + "footer.html")
+    if (fileHtmlFooter.exists()) {
+        cache.footer = Document(fileHtmlFooter.readText(), mutableListOf(),
+                                "", "", LocalDateTime.MIN, -1, false)
+    }
+
+    val fileHtmlTermsUse = File(intakeDirN + "termsOfUse.html")
+    if (fileHtmlTermsUse.exists()) {
+        cache.termsOfUse = Document(fileHtmlTermsUse.readText(), mutableListOf(),
+                "", "", LocalDateTime.MIN, -1, false)
+    }
+
+    val fileCss = File(intakeDirN + "core.css")
+    if (fileCss.exists()) { cache.coreCSS = fileCss.readText() }
+}
+
+
+fun readCachedScripts(rootPath: String, docCache: DocumentCache) {
+    val intakeDirN = rootPath + Constant.scriptsSubfolder
+    val intakeDir = File(intakeDirN)
+    val prefixLength = intakeDirN.length
+    val arrFiles: FileTreeWalk = intakeDir.walk()
+
+    val fileList = arrFiles.filter { file -> file.isFile && file.name.endsWith(".mjs")
+                                    && file.name.length > 5 && file.length() < 500000 }
+                           .toList()
+    fileList.forEach {
+        val shortFileName = it.path.substring(prefixLength, it.path.length - 4) // -4 for the ".mjs"
+        var i = shortFileName.length - 1
+        while (i > 0 && shortFileName[i].isDigit()) {
+            i--
+        }
+        val moduleVersion = shortFileName.substring(i + 1).toInt()!!
+        docCache.insertModule(shortFileName.substring(0, i), moduleVersion)
+    }
+}
+
 
 private fun moveFile(sourcePath: String, targetPath: String, fNShort: String): String {
     val file = File(sourcePath + fNShort)
@@ -316,7 +345,7 @@ private fun moveFile(sourcePath: String, targetPath: String, fNShort: String): S
 }
 
 /**
- * Rewrites links in a document from to point to new position inside /_media.
+ * Rewrites links in a document from to point to new position inside /_m.
  * Returns the document contents with rewritten links.
  */
 private fun rewriteLinks(content: String, intakePath: String, fileSubpath: String,

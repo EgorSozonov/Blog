@@ -24,7 +24,7 @@ object BlogTemplate {
                         </a>                        
                     </div>
                     <div style="text-align: center;">                    
-                        <a href="http://sozonov.tech" title="Home page">
+                        <a href="http://sozonov.site" title="Home page">
                             <svg id="__homeIcon" class="__swell" width="20" height="20" 
                                 viewBox="0 0 100 100">
                                 <circle r="48" cx="50" cy="50" />

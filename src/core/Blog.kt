@@ -22,6 +22,7 @@ private val dateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy
 
 fun buildGetResponse(subUrl: String, queryParams: List<Pair<String, String>>): String {
     try {
+        checkNUpdate(this, rootPath)
         val documentContent = if (subUrl.isEmpty()) {
             docCache.rootPage
         } else if (subUrl == "termsofuse") {
@@ -31,8 +32,6 @@ fun buildGetResponse(subUrl: String, queryParams: List<Pair<String, String>>): S
         }
 
         val modeTemporal = queryParams.any { it.first == "temp" }
-
-        checkNUpdate(this, rootPath)
 
         val navTree = if (modeTemporal) {
             navTime
@@ -49,12 +48,13 @@ fun buildGetResponse(subUrl: String, queryParams: List<Pair<String, String>>): S
 
             for (scriptDep in documentContent.scriptDeps) {
                 val scriptModule = docCache.getModule(scriptDep) ?: return ""
-                append("""<script type="module" src="${Constant.appSubfolder}${Constant.scriptsSubfolder}$scriptModule"/>""")
+                append("""<script type="module" src="/${Constant.appSubfolder}${Constant.scriptsSubfolder}$scriptModule"></script>""")
                 append("\n")
             }
 
             val breadCrumbs = navTree.mkBreadcrumbs(subUrl).joinToString(", ")
             printScriptPart(navString, breadCrumbs, modeTemporal, this@Blog, ::append)
+            append("""<link rel="icon" type="image/x-icon" href="/blog/_m/favicon.ico"/>""")
             append(BlogTemplate.templateHeadCloseBodyStart)
 
             append(documentContent.content)

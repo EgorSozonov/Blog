@@ -1,7 +1,16 @@
+
+body {
+    padding: 0px;
+    margin: 0px;
+    font-family: Palatino, 'Palatino Linotype', 'Palatino LT STD', 'Book Antiqua', Georgia, serif;
+    background-color: black;
+    color: white;
+    width: 100vw;
+}
+
 * {
     box-sizing: border-box;
 }
-
 
 .__navbar {
     display: flex;
@@ -65,14 +74,6 @@
     width: 100vw;
     height: 100vh;
     overflow: hidden;
-}
-
-body {
-    padding: 0px;
-    margin: 0px;
-    font-family: Palatino, 'Palatino Linotype', 'Palatino LT STD', 'Book Antiqua', Georgia, serif;
-    background-color: #FFFFFF;
-    width: 100vw;
 }
 
 .__menu {
@@ -200,29 +201,8 @@ a {
     color: #00A0B0;
 }
 
-table {
-    border: 1px solid #303030;
-    color: #000000;
-}
-
-thead {
-    border-bottom: 1px solid #303030;
-}
-
-tr + tr {
-    border: 1px solid #303030;
-}
-
-td + td {
-    border: 1px dashed #303030;
-}
-
-th + th {
-    border: 1px dashed #303030;
-}
-
 code {
-    color: #303030;
+    color: hsl(0, 0, 80%);
     font-size: 1rem;
 }
 
@@ -232,7 +212,7 @@ code {
     margin-left: 20px;
     width: 90%;
     padding: 10px;
-    border: 1px solid #000000;
+    border: 1px solid black;
     background: #F8F8F8;
 }
 
