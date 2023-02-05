@@ -8,6 +8,7 @@ class Constant {
         const val docsSubfolder = "_d/"
         const val mediaSubfolder = "_m/"
         const val scriptsSubfolder = "_s/"
+        const val scriptsGlobalSubfolder = "_g/"
         const val coreSubfolder = "_core/"
     }
 }

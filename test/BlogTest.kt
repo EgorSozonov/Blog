@@ -5,7 +5,7 @@ import kotlin.test.assertEquals
 internal class BlogTest {
     @Test
     fun `get JS module names 1`() {
-        val input = """<html><head><script type="module" src="foo.mjs" /></head><body><div>asdf</div></body><html> """
+        val input = """<html><head><script type="module" src="foo.js" /></head><body><div>asdf</div></body><html> """
         val result = BlogFile.parseJSModuleNames(input, "asdf/")
         assertEquals(result.size, 1)
         assertEquals(result[0], "foo")
@@ -14,23 +14,23 @@ internal class BlogTest {
     @Test
     fun `get JS module names 2`() {
         val input = """<html><head>
-<script type="module" src="foo.mjs" />
-<script type="module" src="./bar/baz.mjs" />
-<script type="module" src="./another.MJS" />
+<script type="module" src="foo.js" />
+<script type="module" src="./bar/baz.js" />
+<script type="module" src="./another.JS" />
 </head><body><div>asdf</div></body>
 <html>"""
         val result = BlogFile.parseJSModuleNames(input, "asdf/")
         assertEquals(result.size, 3)
         assertEquals(result[0], "foo")
-        assertEquals(result[1], "./bar/baz")
-        assertEquals(result[2], "./another")
+        assertEquals(result[1], "asdf/bar/baz")
+        assertEquals(result[2], "asdf/another")
     }
 
     @Test
     fun `get JS module names 3`() {
         val input = """<html><head>
-<script type="module" src="plotting.mjs"></script>
-<script type="module" src="./gcBenchmark.mjs"/>
+<script type="module" src="plotting.js"></script>
+<script type="module" src="./gcBenchmark.js"/>
 </head><body><div>asdf</div></body>
 <html>"""
         val result = BlogFile.parseJSModuleNames(input, "asdf/")

@@ -3,7 +3,9 @@ import tech.sozonov.blog.core.Constant
 import tech.sozonov.blog.core.Document
 import tech.sozonov.blog.core.DocumentCache
 import tech.sozonov.blog.utils.pathize
+import java.io.BufferedReader
 import java.io.File
+import java.io.StringReader
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -24,7 +26,7 @@ fun ingestFiles(rootPath: String, docCache: DocumentCache): Pair<List<IngestedFi
     val arrFiles: FileTreeWalk = ingestDir.walk()
     val mediaFiles = HashSet<String>(10)
     val scriptNames = arrFiles
-        .filter { file -> file.isFile && file.name.endsWith(".mjs")
+        .filter { file -> file.isFile && file.name.endsWith(".js")
                 && file.name.length > 5 && file.length() < 500000 }
         .map { it.absolutePath }
         .toMutableList()
@@ -85,7 +87,7 @@ private fun ingestCoreFiles(rootPath: String, intakeCorePath: String, docCache: 
     val arrFiles: FileTreeWalk = File(intakeCorePath).walk()
 
     val scriptNames = arrFiles
-        .filter { file -> file.isFile && file.name.endsWith(".mjs")
+        .filter { file -> file.isFile && file.name.endsWith(".js")
                 && file.name.length > 5 && file.length() < 500000 }
         .map { it.absolutePath }
         .toMutableList()
@@ -130,16 +132,56 @@ private fun ingestDoc(file: File, ingestPath: String, mediaFiles: HashSet<String
  */
 private fun ingestScripts(scriptNames: List<String>, rootPath: String, docCache: DocumentCache, isGlobal: Boolean) {
     val targetPath = rootPath + Constant.scriptsSubfolder
+    val prefixLength = rootPath.length + (if (isGlobal) {Constant.ingestCoreSubfolder.length} else {Constant.ingestSubfolder.length})
     for (fN in scriptNames) {
-        val modId = if (isGlobal) { fN.substring(rootPath.length + Constant.ingestCoreSubfolder.length, fN.length - 4) }
-        else { fN.substring(rootPath.length + Constant.ingestSubfolder.length, fN.length - 4) }
+        // -3 for the ".js"
+
+        // a/b/f.js
+        // _g/m.js
 
         File(fN).let { sourceFile ->
-            val nameWithVersion = docCache.updateModule(modId)
-            sourceFile.copyTo(File(targetPath + nameWithVersion))
+            val scriptContent = sourceFile.readText()
+            val subfolder = fN.substring(prefixLength, fN.length - sourceFile.name.length)
+            val rewrittenContent = rewriteScriptImports(scriptContent, subfolder)
+
+            val modId = if (isGlobal) {
+                Constant.scriptsGlobalSubfolder + fN.substring(prefixLength, fN.length - 3) // -3 for ".js"
+            } else {
+                subfolder + sourceFile.name.substring(0, sourceFile.name.length - 3)
+            }
+
+            docCache.insertModule(modId)
+            val targetFile = File(targetPath + modId + ".js")
+//            if (targetFile.exists()) {
+//                targetFile.delete()
+//            }
+            targetFile.writeText(rewrittenContent)
             sourceFile.delete()
         }
     }
+}
+
+/** Rewrites the Jokescript imports to correctly reference files on the server, including global imports */
+private fun rewriteScriptImports(script: String, subfolder: String): String {
+    val spl: MutableList<String> = script.split("\n").toMutableList()
+    var i = 0
+    while (i < spl.size && spl[i].startsWith("import")) {
+        i++
+    }
+    val scriptPrefix = "/${Constant.appSubfolder}${Constant.scriptsSubfolder}"
+    for (j in 0 until i) {
+        val indFrom = spl[j].indexOf("\"")
+        if (indFrom < 0 ) return ""
+        val tail = spl[j].substring(indFrom + 1)
+        if (tail.startsWith("global/")) {
+            spl[j] = spl[j].substring(0, indFrom + 1) + scriptPrefix + Constant.scriptsGlobalSubfolder + spl[j].substring(indFrom + 8) // +8 for `"global/`
+        } else if (tail.startsWith("./")) {
+            spl[j] = spl[j].substring(0, indFrom + 1) + scriptPrefix + subfolder + spl[j].substring(indFrom + 3) // +3 for `"./`
+        } else {
+            return ""
+        }
+    }
+    return spl.joinToString("\n")
 }
 
 
@@ -163,14 +205,14 @@ fun parseJSModuleNames(fileContent: String, fileSubfolder: String): List<String>
 
         val srcString = spl.firstOrNull { it.startsWith("src=\"") } ?: continue
 
-        val mjs = srcString.indexOf(".mjs", 5, true) // 5 for `src="`
-        if (mjs < 0) continue
+        val indJs = srcString.indexOf(".js", 5, true) // 5 for `src="`
+        if (indJs < 0) continue
 
-        val rawModuleName = srcString.substring(5, mjs)
+        val rawModuleName = srcString.substring(5, indJs)
         if (rawModuleName.startsWith("./")) { // adjacent file
             result.add(fileSubfolder + rawModuleName.substring(2))
         } else { // global script module
-            result.add(rawModuleName)
+            result.add(Constant.scriptsGlobalSubfolder + rawModuleName)
         }
     }
     return result
@@ -197,9 +239,9 @@ private fun moveMediaFiles(mediaFiles: HashSet<String>, rootPath: String, length
 /**
  * Updates the document stockpile on disk according to the list of ingested files.
  */
-private fun moveDocs(intakens: List<IngestedFile>, rootPath: String, sourceSubfolder: String, targetSubfolder: String) {
+private fun moveDocs(incomingFiles: List<IngestedFile>, rootPath: String, sourceSubfolder: String, targetSubfolder: String) {
     val targetPrefix = rootPath + targetSubfolder
-    for (iFile in intakens) {
+    for (iFile in incomingFiles) {
         when (iFile) {
             is IngestedFile.CreateUpdate -> {
                 val sourceHtml = File(rootPath + sourceSubfolder + iFile.fullPath + ".html")
@@ -313,17 +355,12 @@ fun readCachedScripts(rootPath: String, docCache: DocumentCache) {
     val prefixLength = intakeDirN.length
     val arrFiles: FileTreeWalk = intakeDir.walk()
 
-    val fileList = arrFiles.filter { file -> file.isFile && file.name.endsWith(".mjs")
+    val fileList = arrFiles.filter { file -> file.isFile && file.name.endsWith(".js")
                                     && file.name.length > 5 && file.length() < 500000 }
                            .toList()
     fileList.forEach {
-        val shortFileName = it.path.substring(prefixLength, it.path.length - 4) // -4 for the ".mjs"
-        var i = shortFileName.length - 1
-        while (i > 0 && shortFileName[i].isDigit()) {
-            i--
-        }
-        val moduleVersion = shortFileName.substring(i + 1).toInt()!!
-        docCache.insertModule(shortFileName.substring(0, i), moduleVersion)
+        val shortFileName = it.path.substring(prefixLength, it.path.length - 3) // -3 for the ".js"
+        docCache.insertModule(shortFileName)
     }
 }
 

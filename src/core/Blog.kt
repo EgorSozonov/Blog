@@ -48,7 +48,7 @@ fun buildGetResponse(subUrl: String, queryParams: List<Pair<String, String>>): S
 
             for (scriptDep in documentContent.scriptDeps) {
                 val scriptModule = docCache.getModule(scriptDep) ?: return ""
-                append("""<script type="module" src="/${Constant.appSubfolder}${Constant.scriptsSubfolder}$scriptModule"></script>""")
+                append("""<script type="module" src="$scriptModule"></script>""")
                 append("\n")
             }
 

@@ -10,7 +10,7 @@ import kotlin.collections.HashMap
 class DocumentCache {
     private val cache: HashMap<String, Document> = HashMap()
     /** Cache of modules and their current versions */
-    private val scriptCache: HashMap<String, Int> = HashMap()
+    private val scriptCache: HashSet<String> = HashSet()
     var coreJS: String = ""
     var coreCSS: String = ""
     var notFound: Document = Document("", mutableListOf(), "", "", LocalDateTime.MIN, 0, false)
@@ -24,31 +24,15 @@ class DocumentCache {
 
 
     fun getModule(modId: String): String? {
-        if (scriptCache.containsKey(modId)) {
-            return modId + "-" + (scriptCache[modId]!!) + ".mjs"
+        if (scriptCache.contains(modId)) {
+            return "$modId.js"
         }
         return null
     }
 
-    fun insertModule(modId: String, version: Int) {
-        scriptCache[modId] = version
+    fun insertModule(modId: String) {
+        scriptCache.add(modId)
     }
-
-    /** This method should be called inside a synchronized block.
-     * It adds a new script module to the cache, or updates and increments its version if it already existed.
-     */
-    fun updateModule(modId: String): String {
-        val newVersion = if (scriptCache.containsKey(modId)) {
-            val newV = scriptCache[modId]!! + 1
-            scriptCache[modId] = newV
-            newV
-        } else {
-            scriptCache[modId] = 1
-            1
-        }
-        return "$modId-$newVersion.mjs"
-    }
-
 
     fun getDocument(path0: String): Document? {
         return if (path0.endsWith(".html")) {
@@ -65,12 +49,12 @@ class DocumentCache {
     }
 
     /**
-     * Loads/reloads a set files and their contents into the cache.
+     * Loads/reloads a set of files and their contents into the cache.
      * Strips HTML outside the <body> tag so that only the relevant contents make it into the cache.
      */
     fun ingestAndRefresh(rootPath: String) {
         if (cache.isEmpty()) {
-            // The order must be this: first read the core stuff, then the scripts, then the docs
+            // The order must be as follows: first read the core stuff, then the scripts, then the docs
             // This is because core stuff is not overwritten by scripts, and docs depend on scripts and core
             BlogFile.readCachedCore(rootPath, this)
             BlogFile.readCachedScripts(rootPath, this)
