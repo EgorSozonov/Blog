@@ -48,13 +48,15 @@ fun buildGetResponse(subUrl: String, queryParams: List<Pair<String, String>>): S
 
             for (scriptDep in documentContent.scriptDeps) {
                 val scriptModule = docCache.getModule(scriptDep) ?: return ""
-                append("""<script type="module" src="/${Constant.appSubfolder}${Constant.scriptsSubfolder}$scriptModule"></script>""")
+                append("""<script type="module" src="/${C.appSubfolder}${C.scriptsSubfolder}$scriptModule"></script>""")
                 append("\n")
             }
+            append("""<script type="module" src="/${C.appSubfolder}${C.scriptsSubfolder}_g/core.js"></script>""")
+            append("\n")
 
             val breadCrumbs = navTree.mkBreadcrumbs(subUrl).joinToString(", ")
-            printScriptPart(navString, breadCrumbs, modeTemporal, this@Blog, ::append)
-            append("""<link rel="icon" type="image/x-icon" href="/blog/_m/favicon.ico"/>""")
+            //printScriptPart(navString, breadCrumbs, modeTemporal, this@Blog, ::append)
+            append("""<link rel="icon" type="image/x-icon" href="/${C.appSubfolder}${C.mediaSubfolder}favicon.ico"/>""")
             append(BlogTemplate.templateHeadCloseBodyStart)
 
             append(documentContent.content)
@@ -75,23 +77,23 @@ private fun printDeviceMeta(wr: (t: String) -> StringBuilder) {
 }
 
 private fun printStylePart(doc: Document, self: Blog, wr: (t: String) -> StringBuilder) {
-    wr("<style>\n")
-    wr(self.docCache.coreCSS)
-    if (doc.contentStyle != "") { wr(doc.contentStyle) }
-    wr("</style>")
+    if (!doc.hasCSS) return
+
+    wr("""<link href="/${C.appSubfolder}${C.mediaSubfolder}${doc.pathCaseSen}.css" rel="stylesheet"></link>
+""")
 }
 
-private fun printScriptPart(navString: String, breadCrumbs: String, modeTemporal: Boolean, self: Blog, wr: (t: String) -> StringBuilder) {
-    wr("<script>")
-    wr(navString)
-
-    val fullLoc = "let cLoc = [$breadCrumbs];"
-    wr(fullLoc)
-
-    wr("let modeTemp = $modeTemporal;")
-    wr(self.docCache.coreJS)
-    wr("</script>")
-}
+//private fun printScriptPart(navString: String, breadCrumbs: String, modeTemporal: Boolean, self: Blog, wr: (t: String) -> StringBuilder) {
+//    wr("<script>")
+//    wr(navString)
+//
+//    val fullLoc = "let cLoc = [$breadCrumbs];"
+//    wr(fullLoc)
+//
+//    wr("let modeTemp = $modeTemporal;")
+//    wr(self.docCache.coreJS)
+//    wr("</script>")
+//}
 
 
 private fun templateNav(navTopic: NavTree, navTime: NavTree): String {

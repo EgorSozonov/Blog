@@ -3,8 +3,9 @@ package tech.sozonov.blog.templates
 
 object BlogTemplate {
     val template0 = """<!DOCTYPE html>
-    <html>
-    <head>"""
+<html>
+<head>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; base-uri 'self';" />"""
 
 
     val templateHeadCloseBodyStart = """
@@ -15,7 +16,7 @@ object BlogTemplate {
                 <div class="__menuTop">
                     <div class="__svgButton" style="text-align: center;" 
                     title="Temporal sorting">                   
-                        <a onclick='reorderTemporal(); return false;'> 
+                        <a id="_reorderTemporal" title="Temporal sorting"> 
                             <svg id="__sorterTemp" class="__swell" width="20" height="20" 
                                 viewBox="0 0 100 100">
                                 <circle r="48" cx="50" cy="50" />
@@ -34,7 +35,7 @@ object BlogTemplate {
                         </a>
                     </div>
                     <div class="__svgButton" style="text-align: center;">                    
-                        <a onclick='reorderThematic(); return false;' title="Nominal sorting">
+                        <a id="_reorderThematic" title="Thematic sorting">
                             <svg class="__swell __sortingBorder" id="__sorterNom" width="20" 
                             height="20"
                              viewBox="0 0 100 100">
@@ -47,10 +48,10 @@ object BlogTemplate {
                 <div class="__menu" id="__theMenu"></div>
             </div>
 
-            <div class="__divider" id="__divider" onClick="toggleNavBar();">&lt;</div>
+            <div class="__divider" id="_divider">&lt;</div>
             <div class="__menuToggler __hidden" id="__menuToggler">
                 <div class="__svgButton" style="text-align: center;" title="Open menu">                   
-                        <a onclick="toggleNavBar(); return false;"> 
+                        <a id="_toggleNavBar"> 
                             <svg class="__swell" width="20" height="20" viewBox="0 0 100 100">
                                 <circle r="48" cx="50" cy="50"></circle>
                                 <path d="M 30 35 h 40" stroke-width="6"></path>

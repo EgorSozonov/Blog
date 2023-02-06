@@ -1,4 +1,4 @@
-import tech.sozonov.blog.datasource.file.BlogFile
+import tech.sozonov.blog.core.Rewriter
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -6,7 +6,7 @@ internal class BlogTest {
     @Test
     fun `get JS module names 1`() {
         val input = """<html><head><script type="module" src="foo.js" /></head><body><div>asdf</div></body><html> """
-        val result = BlogFile.parseJSModuleNames(input, "asdf/")
+        val result = Rewriter.parseJSModuleNames(input, "asdf/")
         assertEquals(result.size, 1)
         assertEquals(result[0], "foo")
     }
@@ -19,7 +19,7 @@ internal class BlogTest {
 <script type="module" src="./another.JS" />
 </head><body><div>asdf</div></body>
 <html>"""
-        val result = BlogFile.parseJSModuleNames(input, "asdf/")
+        val result = Rewriter.parseJSModuleNames(input, "asdf/")
         assertEquals(result.size, 3)
         assertEquals(result[0], "foo")
         assertEquals(result[1], "asdf/bar/baz")
@@ -33,7 +33,7 @@ internal class BlogTest {
 <script type="module" src="./gcBenchmark.js"/>
 </head><body><div>asdf</div></body>
 <html>"""
-        val result = BlogFile.parseJSModuleNames(input, "asdf/")
+        val result = Rewriter.parseJSModuleNames(input, "asdf/")
         assertEquals(result.size, 2)
         assertEquals(result[0], "plotting")
         assertEquals(result[1], "asdf/gcBenchmark")

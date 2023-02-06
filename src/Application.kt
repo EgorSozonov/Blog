@@ -2,12 +2,11 @@ package tech.sozonov.blog
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.http.content.*
-import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.util.*
 import tech.sozonov.blog.core.Blog
-import tech.sozonov.blog.core.Constant
+import tech.sozonov.blog.core.C
 import java.io.File
 import java.time.Duration
 import io.ktor.server.plugins.cachingheaders.*
@@ -24,9 +23,9 @@ fun Application.module() {
 
 
 fun Application.configureRouting() {
-    val mainUrl = "/" + Constant.appSubfolder + "{subUrl...}"
-    val mediaUrl = "/" + Constant.appSubfolder + Constant.mediaSubfolder
-    val scriptUrl = "/" + Constant.appSubfolder + Constant.scriptsSubfolder
+    val mainUrl = "/" + C.appSubfolder + "{subUrl...}"
+    val mediaUrl = "/" + C.appSubfolder + C.mediaSubfolder
+    val scriptUrl = "/" + C.appSubfolder + C.scriptsSubfolder
     val oneYearInSeconds = Duration.ofDays(365).toSeconds()
     routing {
         trace { application.log.trace(it.buildText()) }
@@ -53,12 +52,12 @@ fun Application.configureRouting() {
         }
 
         static(mediaUrl) {
-            this.staticRootFolder = File(Blog.rootPath + Constant.mediaSubfolder)
+            this.staticRootFolder = File(Blog.rootPath + C.mediaSubfolder)
             files(".")
         }
 
         static(scriptUrl) {
-            this.staticRootFolder = File(Blog.rootPath + Constant.scriptsSubfolder)
+            this.staticRootFolder = File(Blog.rootPath + C.scriptsSubfolder)
             files(".")
         }
     }

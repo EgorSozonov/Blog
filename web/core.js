@@ -183,7 +183,6 @@ function clearLocation() {
     cLoc = []
 }
 
-document.addEventListener("DOMContentLoaded", () => populateMenu(true));
 
 function showLogin() {
     let loginForm = document.getElementById("__loginDiv");
@@ -193,6 +192,7 @@ function showLogin() {
     showButton.style.display = 'none';
     hideButton.style.display = 'inline';
 }
+
 
 function hideLogin() {
     let loginForm = document.getElementById("__loginDiv");
@@ -204,7 +204,17 @@ function hideLogin() {
     hideButton.style.display = 'none';
 }
 
+
 function tryLogin() {
     let userLogin = document.getElementById("__loginInput").value;
     let userPw = document.getElementById("__loginPwInput").value;
 }
+
+
+document.addEventListener("DOMContentLoaded", () => {
+    document.getElementById("_divider").addEventListener("click", toggleNavBar)
+    document.getElementById("_reorderTemporal").addEventListener("click", reorderTemporal)
+    document.getElementById("_reorderThematic").addEventListener("click", reorderThematic)
+
+    populateMenu(true)
+});

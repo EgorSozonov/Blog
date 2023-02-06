@@ -24,6 +24,7 @@ body {
     overflow-y: scroll;
     flex-grow: 100;
     margin: 0;
+    padding: 0.5rem;
 }
 
 @media screen and (max-width: 800px) {
@@ -181,18 +182,18 @@ p {
 .__articleTitle h1 {
     text-align: center;
     font-size: 2rem;
-    color: #000000;
+    color: white;
     padding: 10px;
 }
 
 .__articleTitle h3 {
     text-align: center;
-    color: #000000;
+    color: white;
     padding: 10px;
 }
 
 .__articleBody {
-    color: #000000;
+    color: white;
     padding: 10px;
 }
 

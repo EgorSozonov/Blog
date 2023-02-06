@@ -13,13 +13,13 @@ class DocumentCache {
     private val scriptCache: HashSet<String> = HashSet()
     var coreJS: String = ""
     var coreCSS: String = ""
-    var notFound: Document = Document("", mutableListOf(), "", "", LocalDateTime.MIN, 0, false)
-    var footer: Document = Document("", mutableListOf(),"", "", LocalDateTime.MIN, 0, false)
-    var rootPage: Document = Document("", mutableListOf(),"", "", LocalDateTime.MIN, 0, false)
-    var termsOfUse: Document = Document("", mutableListOf(),"", "", LocalDateTime.MIN, 0, false)
+    var notFound: Document = Document("", mutableListOf(), false, "", LocalDateTime.MIN, 0, false)
+    var footer: Document = Document("", mutableListOf(), false, "", LocalDateTime.MIN, 0, false)
+    var rootPage: Document = Document("", mutableListOf(), false, "", LocalDateTime.MIN, 0, false)
+    var termsOfUse: Document = Document("", mutableListOf(), false, "", LocalDateTime.MIN, 0, false)
 
     companion object {
-        private val emptyDocument = Document("", mutableListOf(),"", "", LocalDateTime.MIN, 0, false)
+        private val emptyDocument = Document("", mutableListOf(), false, "", LocalDateTime.MIN, 0, false)
     }
 
 
@@ -64,13 +64,12 @@ class DocumentCache {
         println("ingesting and refreshing at root path $rootPath")
         val (ingestedDocs, ingestedCore) = BlogFile.ingestFiles(rootPath, this)
 
-        if (!ingestedDocs.isEmpty()) {
+        if (ingestedDocs.isNotEmpty()) {
             for (i in ingestedDocs.indices) {
-                val inFile = ingestedDocs[i]
-                when (inFile) {
+                when (val inFile = ingestedDocs[i]) {
                     is IngestedFile.CreateUpdate -> {
                         val key = inFile.fullPath.lowercase().replace(" ", "")
-                        cache[key] = Document(inFile.content, inFile.jsModules, inFile.styleContent,
+                        cache[key] = Document(inFile.content, inFile.jsModules, inFile.styleContent != "",
                                               inFile.fullPath.replace(" ", ""),
                                               inFile.modifTime, -1, false)
                     }
@@ -116,7 +115,7 @@ class DocumentCache {
         return if (intaken != null && intaken is IngestedFile.CreateUpdate) {
             Document(
                     intaken.content, intaken.jsModules,
-                    intaken.styleContent,
+                    intaken.styleContent != "",
                     "",
                     intaken.modifTime, -1, false)
         } else {
@@ -126,5 +125,5 @@ class DocumentCache {
 }
 
 
-data class Document(val content: String, val scriptDeps: List<String>, val contentStyle: String,
+data class Document(val content: String, val scriptDeps: List<String>, val hasCSS: Boolean,
                     val pathCaseSen: String, val modifiedDate: LocalDateTime, var pageId: Int, var wasAddedDB: Boolean)
