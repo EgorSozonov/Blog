@@ -105,12 +105,12 @@ class NavTree() {
                 } else {
                     result.append("[\"")
                     result.append(next.name)
-                    result.append("\", [], ], ")
+                    result.append("\", [] ] ")
                 }
 
             } else {
                 stack.pop()
-                if (stack.any()) result.append("], ], ")
+                if (stack.any()) result.append("]] ")
             }
             top.second += 1
         }

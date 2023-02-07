@@ -1,45 +1,49 @@
-let cOpen = cLoc[cLoc.length - 1];
 let paramTemp = '';
 const homePath = "/blog/";
+let cLoc = []
+let modeTemp = false
 
 function toggleNavBar() {
-    const divider = document.getElementById("__divider")
+    const divider = document.getElementById("_divider")
     if (!divider.classList.contains("__hidden")) {
         hideNavBar()
     } else {
-        const divider = document.getElementById("__divider")
-        const nBar = document.getElementById("__theNavBar")
+        const divider = document.getElementById("_divider")
+        const nBar = document.getElementById("_theNavBar")
         nBar.classList.remove("__hidden")
         nBar.classList.remove("__unopaque")
         nBar.classList.add("__opaque")
         void nBar.offsetWidth
-        document.getElementById("__divider").classList.remove("__hidden")
+        document.getElementById("_divider").classList.remove("__hidden")
 
-        const toggler = document.getElementById("__menuToggler")
+        const toggler = document.getElementById("_menuToggler")
         toggler.classList.add("__hidden")
 
     }
 }
 
 function hideNavBar() {
-    const nBar = document.getElementById("__theNavBar")
+    const nBar = document.getElementById("_theNavBar")
     nBar.classList.remove("__opaque")
     nBar.classList.add("__unopaque")
     void nBar.offsetWidth
     nBar.classList.add("__hidden")
 
-    const toggler = document.getElementById("__menuToggler")
+    const toggler = document.getElementById("_menuToggler")
     toggler.classList.remove("__hidden")
 
-    document.getElementById("__divider").classList.add("__hidden")
+    document.getElementById("_divider").classList.add("__hidden")
 }
 
 function populateMenu(isFirstLoad) {
+    const navStateContainer = document.getElementById("_navState")
+    const navState = JSON.parse(navStateContainer.textContent)
     if (isFirstLoad === true && window.matchMedia("only screen and (max-width: 800px)").matches) {
         hideNavBar()
     }
-
-    const nav = modeTemp ? navTemporal : navTopics;
+    cLoc = navState.cLoc
+    const nav = navState.modeTemp ? navState.navTemporal : navState.navTopics;
+    modeTemp = nav.modeTemp
     if (!nav || !cLoc ) return
 
     if (modeTemp === true) {
@@ -106,14 +110,18 @@ function populateMenu(isFirstLoad) {
                 cont.appendChild(child)
             } else {
                 link.setAttribute('href', '#')
-                link.setAttribute('onclick', "goToPage('" + homePath + listOpen[i][0] + (modeTemp ?
-                "?temp" : "") + "');return false;")
+                link.addEventListener('click', () => goToPage(homePath + listOpen[i][0] + (modeTemp ?
+                "?temp" : "")))
+//                link.setAttribute('onclick', "goToPage('" + homePath + listOpen[i][0] + (modeTemp ?
+//                "?temp" : "") + "');return false;")
                 link.innerHTML = displayLeaf(listOpen[i][0])
             }
         } else {
             link.setAttribute('href', '#')
-            link.setAttribute('onclick', (leafMode === true ? 'strafe(' : 'moveDown(') + (i)
-                + ');return false;')
+            link.addEventListener('click', () => (leafMode === true ? strafe(i) : moveDown(i)))
+
+//            link.setAttribute('onclick', (leafMode === true ? 'strafe(' : 'moveDown(') + (i)
+//                + ');return false;')
             link.innerHTML = "[" + listOpen[i][0] + "]"
         }
         cParent.appendChild(link)
@@ -215,6 +223,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("_divider").addEventListener("click", toggleNavBar)
     document.getElementById("_reorderTemporal").addEventListener("click", reorderTemporal)
     document.getElementById("_reorderThematic").addEventListener("click", reorderThematic)
+    document.getElementById("_menuToggler").addEventListener("click", toggleNavBar)
 
     populateMenu(true)
 });

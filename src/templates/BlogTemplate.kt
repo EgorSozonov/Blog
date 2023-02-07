@@ -12,10 +12,9 @@ object BlogTemplate {
     </head>
     <body>
         <div class="__wrapper">
-            <div class="__navbar" id="__theNavBar">
+            <div class="__navbar" id="_theNavBar">
                 <div class="__menuTop">
-                    <div class="__svgButton" style="text-align: center;" 
-                    title="Temporal sorting">                   
+                    <div class="__svgButton" title="Temporal sorting">                   
                         <a id="_reorderTemporal" title="Temporal sorting"> 
                             <svg id="__sorterTemp" class="__swell" width="20" height="20" 
                                 viewBox="0 0 100 100">
@@ -24,7 +23,7 @@ object BlogTemplate {
                             </svg>
                         </a>                        
                     </div>
-                    <div style="text-align: center;">                    
+                    <div class="__svgButton">                    
                         <a href="http://sozonov.site" title="Home page">
                             <svg id="__homeIcon" class="__swell" width="20" height="20" 
                                 viewBox="0 0 100 100">
@@ -34,7 +33,7 @@ object BlogTemplate {
                             </svg>
                         </a>
                     </div>
-                    <div class="__svgButton" style="text-align: center;">                    
+                    <div class="__svgButton">                    
                         <a id="_reorderThematic" title="Thematic sorting">
                             <svg class="__swell __sortingBorder" id="__sorterNom" width="20" 
                             height="20"
@@ -49,8 +48,8 @@ object BlogTemplate {
             </div>
 
             <div class="__divider" id="_divider">&lt;</div>
-            <div class="__menuToggler __hidden" id="__menuToggler">
-                <div class="__svgButton" style="text-align: center;" title="Open menu">                   
+            <div class="__menuToggler __hidden" id="_menuToggler">
+                <div class="__svgButton" title="Open menu">                   
                         <a id="_toggleNavBar"> 
                             <svg class="__swell" width="20" height="20" viewBox="0 0 100 100">
                                 <circle r="48" cx="50" cy="50"></circle>

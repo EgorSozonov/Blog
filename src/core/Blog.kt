@@ -42,7 +42,6 @@ fun buildGetResponse(subUrl: String, queryParams: List<Pair<String, String>>): S
         val result = buildString {
             append(BlogTemplate.template0)
 
-            val navString = templateNav(navTopic, navTime)
             printDeviceMeta(::append)
             printStylePart(documentContent, this@Blog, ::append)
 
@@ -55,7 +54,7 @@ fun buildGetResponse(subUrl: String, queryParams: List<Pair<String, String>>): S
             append("\n")
 
             val breadCrumbs = navTree.mkBreadcrumbs(subUrl).joinToString(", ")
-            //printScriptPart(navString, breadCrumbs, modeTemporal, this@Blog, ::append)
+            printScriptPart(breadCrumbs, modeTemporal, navTopic, navTime, ::append)
             append("""<link rel="icon" type="image/x-icon" href="/${C.appSubfolder}${C.mediaSubfolder}favicon.ico"/>""")
             append(BlogTemplate.templateHeadCloseBodyStart)
 
@@ -77,40 +76,28 @@ private fun printDeviceMeta(wr: (t: String) -> StringBuilder) {
 }
 
 private fun printStylePart(doc: Document, self: Blog, wr: (t: String) -> StringBuilder) {
+    wr("""<link rel="stylesheet" href="/${C.appSubfolder}${C.mediaSubfolder}${C.globalsSubfolder}core.css" />
+""")
     if (!doc.hasCSS) return
 
-    wr("""<link href="/${C.appSubfolder}${C.mediaSubfolder}${doc.pathCaseSen}.css" rel="stylesheet"></link>
+    wr("""<link rel="stylesheet" href="/${C.appSubfolder}${C.mediaSubfolder}${doc.pathCaseSen}.css" />
 """)
 }
 
-//private fun printScriptPart(navString: String, breadCrumbs: String, modeTemporal: Boolean, self: Blog, wr: (t: String) -> StringBuilder) {
-//    wr("<script>")
-//    wr(navString)
-//
-//    val fullLoc = "let cLoc = [$breadCrumbs];"
-//    wr(fullLoc)
-//
-//    wr("let modeTemp = $modeTemporal;")
-//    wr(self.docCache.coreJS)
-//    wr("</script>")
-//}
-
-
-private fun templateNav(navTopic: NavTree, navTime: NavTree): String {
+private fun printScriptPart(breadCrumbs: String, modeTemporal: Boolean, navTopic: NavTree, navTime: NavTree, wr: (t: String) -> StringBuilder) {
     val strTopics = navTopic.toJokeScript()
     val strTemp = navTime.toJokeScript()
-    return """
-'use strict;'
-const navTopics = [$strTopics];
-const navTemporal = [$strTemp];
-"""
-}
-
-// endregion
-
-// region 404Response
-suspend fun build404Response(webExchange: ApplicationCall) {
-    webExchange.respondText("404 error")
+    wr("""<script type="application/json" id="_navState">{
+""")
+    wr("""    "cLoc": [$breadCrumbs],
+""")
+    wr("""    "modeTemp": $modeTemporal,
+""")
+    wr("""    "navTopics": [$strTopics],
+""")
+    wr("""    "navTemporal": [$strTemp]
+""")
+    wr("}</script>")
 }
 
 // endregion
