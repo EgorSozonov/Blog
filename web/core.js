@@ -2,6 +2,9 @@ let paramTemp = '';
 const homePath = "/blog/";
 let cLoc = []
 let modeTemp = false
+let nav = []
+let navTemporal = []
+let navThematic = []
 
 function toggleNavBar() {
     const divider = document.getElementById("_divider")
@@ -38,21 +41,28 @@ function hideNavBar() {
 function populateMenu(isFirstLoad) {
     const navStateContainer = document.getElementById("_navState")
     const navState = JSON.parse(navStateContainer.textContent)
-    if (isFirstLoad === true && window.matchMedia("only screen and (max-width: 800px)").matches) {
-        hideNavBar()
+    if (isFirstLoad === true) {
+        cLoc = navState.cLoc
+        navThematic = navState.navThematic
+        navTemporal = navState.navTemporal
+        modeTemp = navState.modeTemp
+        if (!nav || !cLoc ) return
+
+        if (window.matchMedia("only screen and (max-width: 800px)").matches) {
+            hideNavBar()
+        }
     }
-    cLoc = navState.cLoc
-    const nav = navState.modeTemp ? navState.navTemporal : navState.navTopics;
-    modeTemp = nav.modeTemp
-    if (!nav || !cLoc ) return
+
 
     if (modeTemp === true) {
-        document.getElementById("__sorterTemp").classList.add("__sortingBorder")
-        const sorterOther = document.getElementById("__sorterNom")
+        nav = navTemporal
+        document.getElementById("_sorterTemp").classList.add("__sortingBorder")
+        const sorterOther = document.getElementById("_sorterThem")
         if (sorterOther.classList.contains("__sortingBorder")) sorterOther.classList.remove("__sortingBorder")
     } else {
-        document.getElementById("__sorterNom").classList.add("__sortingBorder")
-        const sorterOther = document.getElementById("__sorterTemp")
+        nav = navThematic
+        document.getElementById("_sorterThem").classList.add("__sortingBorder")
+        const sorterOther = document.getElementById("_sorterTemp")
         if (sorterOther.classList.contains("__sortingBorder")) sorterOther.classList.remove("__sortingBorder")
     }
 
@@ -67,14 +77,11 @@ function populateMenu(isFirstLoad) {
     let leafMode = false
 
     for (let i = 0; i < cLoc.length; ++i) {
-        const nextTurn = cLoc[i]
-
-        cNode = cNode[1][nextTurn]
+        cNode = cNode[1][cLoc[i]]
         if (i == cLoc.length - 2) {
             listPrev = cNode[1]
             nameUp = cNode[0]
-        }
-        if (i == cLoc.length - 1) {
+        } else if (i == cLoc.length - 1) {
             indLast = cLoc[i]
             leafMode = cNode[1].length === 0
         }
@@ -90,7 +97,7 @@ function populateMenu(isFirstLoad) {
         const divUp = document.createElement('div')
         const linkUp = document.createElement('a')
         linkUp.setAttribute('href', '#')
-        linkUp.setAttribute('onclick', 'moveUp(' + (leafMode === true ? 2 : 1) + ');return false;')
+        linkUp.addEventListener('click', () => moveUp((leafMode === true ? 2 : 1)))
         linkUp.innerHTML = "^ " + nameUp
         divUp.appendChild(linkUp)
         cont.appendChild(divUp)
@@ -112,16 +119,11 @@ function populateMenu(isFirstLoad) {
                 link.setAttribute('href', '#')
                 link.addEventListener('click', () => goToPage(homePath + listOpen[i][0] + (modeTemp ?
                 "?temp" : "")))
-//                link.setAttribute('onclick', "goToPage('" + homePath + listOpen[i][0] + (modeTemp ?
-//                "?temp" : "") + "');return false;")
                 link.innerHTML = displayLeaf(listOpen[i][0])
             }
         } else {
             link.setAttribute('href', '#')
             link.addEventListener('click', () => (leafMode === true ? strafe(i) : moveDown(i)))
-
-//            link.setAttribute('onclick', (leafMode === true ? 'strafe(' : 'moveDown(') + (i)
-//                + ');return false;')
             link.innerHTML = "[" + listOpen[i][0] + "]"
         }
         cParent.appendChild(link)
@@ -131,7 +133,7 @@ function populateMenu(isFirstLoad) {
 
 function goToPage(path) {
     window.location = path;
-    toggleNavBar();
+    //toggleNavBar();
 }
 
 function displayLeaf(leafStr) {

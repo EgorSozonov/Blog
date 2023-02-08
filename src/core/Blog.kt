@@ -1,6 +1,4 @@
 package tech.sozonov.blog.core
-import io.ktor.server.application.*
-import io.ktor.server.response.*
 import tech.sozonov.blog.templates.BlogTemplate
 import tech.sozonov.blog.utils.Tuple
 import java.time.format.DateTimeFormatter
@@ -85,15 +83,15 @@ private fun printStylePart(doc: Document, self: Blog, wr: (t: String) -> StringB
 }
 
 private fun printScriptPart(breadCrumbs: String, modeTemporal: Boolean, navTopic: NavTree, navTime: NavTree, wr: (t: String) -> StringBuilder) {
-    val strTopics = navTopic.toJokeScript()
-    val strTemp = navTime.toJokeScript()
+    val strTopics = navTopic.toJson()
+    val strTemp = navTime.toJson()
     wr("""<script type="application/json" id="_navState">{
 """)
     wr("""    "cLoc": [$breadCrumbs],
 """)
     wr("""    "modeTemp": $modeTemporal,
 """)
-    wr("""    "navTopics": [$strTopics],
+    wr("""    "navThematic": [$strTopics],
 """)
     wr("""    "navTemporal": [$strTemp]
 """)

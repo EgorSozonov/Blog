@@ -16,7 +16,7 @@ object BlogTemplate {
                 <div class="__menuTop">
                     <div class="__svgButton" title="Temporal sorting">                   
                         <a id="_reorderTemporal" title="Temporal sorting"> 
-                            <svg id="__sorterTemp" class="__swell" width="20" height="20" 
+                            <svg id="_sorterTemp" class="__swell" width="20" height="20" 
                                 viewBox="0 0 100 100">
                                 <circle r="48" cx="50" cy="50" />
                                 <path d="M 35 20 h 30 c 0 30 -30 30 -30 60 h 30 c 0 -30 -30 -30 -30 -60" />
@@ -35,7 +35,7 @@ object BlogTemplate {
                     </div>
                     <div class="__svgButton">                    
                         <a id="_reorderThematic" title="Thematic sorting">
-                            <svg class="__swell __sortingBorder" id="__sorterNom" width="20" 
+                            <svg class="__swell __sortingBorder" id="_sorterThem" width="20" 
                             height="20"
                              viewBox="0 0 100 100">
                                 <circle r="48" cx="50" cy="50" />

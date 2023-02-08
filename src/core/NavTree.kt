@@ -37,7 +37,7 @@ class NavTree() {
         var curr = this.children
         for (i in 0 until spl.lastIndex) {
             result[i] = curr.indexOfFirst { it.name == spl[i] }
-            // if address is not found in spine, maybe this is a temporal tree and it can be found in the leaves
+            // if address is not found in spine, then this is a temporal tree and it can be found in the leaves
             if (result[i] < 0) return mkBreadcrumbsTemporal(subAddress)
             curr = curr[result[i]].children
         }
@@ -65,7 +65,7 @@ class NavTree() {
                 if (next.children.size > 0) {
                     stack.push(Tuple(next, 0))
                 } else {
-                    if (next.name.lowercase() == subAddress) {
+                    if (next.name == subAddress) {
                         val result = IntArray(stack.size)
                         for (i in stack.indices) {
                             result[i] = stack[i].second
@@ -86,7 +86,7 @@ class NavTree() {
     }
 
 
-    fun toJokeScript(): String {
+    fun toJson(): String {
         val stack = ArrayDeque<Tuple<NavTree, Int>>()
         if (this.children.size == 0) return ""
 
@@ -105,12 +105,25 @@ class NavTree() {
                 } else {
                     result.append("[\"")
                     result.append(next.name)
-                    result.append("\", [] ] ")
+                    if (top.second == top.first.children.size - 1) {
+                        result.append("\", [] ] ")
+                    } else {
+                        result.append("\", [] ], ")
+                    }
+
                 }
 
             } else {
                 stack.pop()
-                if (stack.any()) result.append("]] ")
+
+                if (stack.any()) {
+                    val parent = stack.peek()
+                    if (parent.second < parent.first.children.size) {
+                        result.append("]], ")
+                    } else {
+                        result.append("]] ")
+                    }
+                }
             }
             top.second += 1
         }

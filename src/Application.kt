@@ -43,8 +43,19 @@ fun Application.configureRouting() {
 
         get(mainUrl) {
             val subUrlChunks: List<String>? = call.parameters.getAll("subUrl")
-            val subUrl: String = subUrlChunks?.map{ it.lowercase() }?.joinToString("/") ?: ""
-
+            if (subUrlChunks == null) {
+                call.respondText("Error: empty request!", ContentType.Text.Plain, HttpStatusCode.BadRequest)
+                return@get
+            }
+            if (subUrlChunks.size > 256) {
+                call.respondText("Error: request too long!", ContentType.Text.Plain, HttpStatusCode.BadRequest)
+                return@get
+            }
+            val subUrl: String = subUrlChunks.joinToString("/")
+            if (subUrl.length > 1024) {
+                call.respondText("Error: request too long!", ContentType.Text.Plain, HttpStatusCode.BadRequest)
+                return@get
+            }
             val queryParams = call.request.queryParameters.flattenEntries()
 
             val responseHTML = Blog.buildGetResponse(subUrl, queryParams)
