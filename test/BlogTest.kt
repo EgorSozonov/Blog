@@ -8,20 +8,20 @@ internal class BlogTest {
         val input = """<html><head><script type="module" src="foo.js" /></head><body><div>asdf</div></body><html> """
         val result = Rewriter.parseJSModuleNames(input, "asdf/")
         assertEquals(result.size, 1)
-        assertEquals(result[0], "foo")
+        assertEquals(result[0], "_g/foo")
     }
 
     @Test
     fun `get JS module names 2`() {
         val input = """<html><head>
-<script type="module" src="foo.js" />
+<script type="module" src="Foo.js" />
 <script type="module" src="./bar/baz.js" />
 <script type="module" src="./another.JS" />
 </head><body><div>asdf</div></body>
 <html>"""
         val result = Rewriter.parseJSModuleNames(input, "asdf/")
         assertEquals(result.size, 3)
-        assertEquals(result[0], "foo")
+        assertEquals(result[0], "_g/Foo")
         assertEquals(result[1], "asdf/bar/baz")
         assertEquals(result[2], "asdf/another")
     }
@@ -35,7 +35,7 @@ internal class BlogTest {
 <html>"""
         val result = Rewriter.parseJSModuleNames(input, "asdf/")
         assertEquals(result.size, 2)
-        assertEquals(result[0], "plotting")
+        assertEquals(result[0], "_g/plotting")
         assertEquals(result[1], "asdf/gcBenchmark")
     }
 }

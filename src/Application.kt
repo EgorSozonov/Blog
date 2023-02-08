@@ -15,7 +15,6 @@ import io.ktor.http.content.CachingOptions
 @Suppress("unused")
 fun Application.module() {
     println("hello world")
-    //install(CachingHeaders)
     val rootPath = environment.config.propertyOrNull("ktor.fileRoot")?.getString()!!
     Blog.rootPath = rootPath
     configureRouting()
@@ -34,6 +33,7 @@ fun Application.configureRouting() {
             options { call, content ->
                 when (content.contentType?.withoutParameters()) {
                     ContentType.Text.JavaScript -> CachingOptions(CacheControl.MaxAge(maxAgeSeconds = 3600))
+                    ContentType.Text.CSS -> CachingOptions(CacheControl.MaxAge(maxAgeSeconds = 3600))
                     ContentType.Text.Html -> CachingOptions(CacheControl.MaxAge(maxAgeSeconds = 300))
                     else -> null
                 }

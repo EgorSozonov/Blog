@@ -108,7 +108,7 @@ private fun printScriptPart(breadCrumbs: String, modeTemporal: Boolean, navTopic
 private fun checkNUpdate(self: Blog, rootPath: String){ //, conn: Connection) {
     val dtNow = LocalDateTime.now()
     val dur = Duration.between(self.dtNavUpdated, dtNow)
-    if (dur.toSeconds() <= 5) { return }
+    if (dur.toMinutes() <= 5) { return }
 
     synchronized(self) {
         self.docCache.ingestAndRefresh(rootPath)
