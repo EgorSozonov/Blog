@@ -7,7 +7,7 @@ import java.time.LocalDateTime
 import java.time.Month
 import kotlin.Triple
 
-
+/** Navigation tree with the [name [children]] node format */
 class NavTree() {
     var name: String
     var children: MutableList<NavTree>
@@ -23,9 +23,8 @@ class NavTree() {
         children = _children
     }
 
-
     /**
-     * Make breadcrumbs that trace the way to this file through the navigation tree.
+     * Make breadcrumbs that trace the way to this file from the root.
      * Attempts to follow the spine, but this doesn't work for temporal nav trees, so in case of an element not found
      * it switches to the slow version (which searches through all the leaves).
      */
@@ -110,9 +109,7 @@ class NavTree() {
                     } else {
                         result.append("\", [] ], ")
                     }
-
                 }
-
             } else {
                 stack.pop()
 
@@ -157,10 +154,6 @@ class NavTree() {
             val pagesByName = pages
                     .map{ x -> Triple(x.first, x.second, x.first.split("/"))}
                     .sortedWith ( comparatorFolders)
-
-//            val fNSplits = pagesByName.map {
-//                it.first.split("/")
-//            }
             val stack = mutableListOf<NavTree>()
             val root = NavTree("", mutableListOf())
             stack.add(root)
@@ -225,7 +218,7 @@ class NavTree() {
         }
 
 
-        protected fun toName(month: java.time.Month): String {
+        protected fun toName(month: Month): String {
             return when (month) {
                 Month.JANUARY -> "Jan"
                 Month.FEBRUARY -> "Feb"

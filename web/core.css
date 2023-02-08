@@ -3,7 +3,7 @@ body {
     padding: 0px;
     margin: 0px;
     font-family: Palatino, 'Palatino Linotype', 'Palatino LT STD', 'Book Antiqua', Georgia, serif;
-    background-color: black;
+    background-color: hsl(0, 0%, 8%);
     color: white;
     width: 100vw;
 }
@@ -21,10 +21,10 @@ body {
 }
 
 .__content {
-    overflow-y: scroll;
     flex-grow: 100;
     margin: 0;
     padding: 0.5rem;
+    overflow-y: scroll;
 }
 
 @media screen and (max-width: 800px) {
@@ -43,7 +43,7 @@ body {
 
 @media screen and (min-width: 801px) {
     body {
-        font-size: 12px;
+        font-size: 14px;
     }
 }
 
@@ -61,8 +61,13 @@ body {
 
 .__menuToggler {
     position: fixed;
-    left: 10px;
-    top: 10px;
+    left: 15px;
+    top: 15px;
+    opacity: 0.8;
+}
+
+.__menuToggler:hover {
+    opacity: 1.0;
 }
 
 .__menuToggler svg {
@@ -232,8 +237,8 @@ code {
 }
 
 .__basePage {
-    border-width: 1px;
-    border-style: solid;
+    font-size: 1.2rem;
+    margin-bottom: 2rem;
 }
 
 .__notFound {

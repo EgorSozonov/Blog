@@ -268,6 +268,12 @@ fun readCachedCore(rootPath: String, cache: DocumentCache) {
     val fileJs = File(intakeDirN + "core.js")
     if (fileJs.exists()) { cache.coreJS = fileJs.readText() }
 
+    val fileHtmlRoot = File(intakeDirN + "core.html")
+    if (fileHtmlRoot.exists()) {
+        cache.rootPage = Document(fileHtmlRoot.readText(), mutableListOf(),
+            false, "", LocalDateTime.MIN, -1, false)
+    }
+
     val fileHtmlNotFound = File(intakeDirN + "notFound.html")
     if (fileHtmlNotFound.exists()) {
         cache.notFound = Document(fileHtmlNotFound.readText(), mutableListOf(),

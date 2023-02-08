@@ -16,7 +16,7 @@ object BlogTemplate {
                 <div class="__menuTop">
                     <div class="__svgButton" title="Temporal sorting">                   
                         <a id="_reorderTemporal" title="Temporal sorting"> 
-                            <svg id="_sorterTemp" class="__swell" width="20" height="20" 
+                            <svg id="_sorterTemp" class="__swell" width="30" height="30" 
                                 viewBox="0 0 100 100">
                                 <circle r="48" cx="50" cy="50" />
                                 <path d="M 35 20 h 30 c 0 30 -30 30 -30 60 h 30 c 0 -30 -30 -30 -30 -60" />
@@ -25,8 +25,8 @@ object BlogTemplate {
                     </div>
                     <div class="__svgButton">                    
                         <a href="http://sozonov.site" title="Home page">
-                            <svg id="__homeIcon" class="__swell" width="20" height="20" 
-                                viewBox="0 0 100 100">
+                            <svg id="__homeIcon" class="__swell" width="30" height="30" 
+                             viewBox="0 0 100 100">
                                 <circle r="48" cx="50" cy="50" />
                                 <path d="M 30 45 h 40 v 25 h -40 v -25 " />
                                 <path d="M 22 50 l 28 -25 l 28 25" />
@@ -35,8 +35,7 @@ object BlogTemplate {
                     </div>
                     <div class="__svgButton">                    
                         <a id="_reorderThematic" title="Thematic sorting">
-                            <svg class="__swell __sortingBorder" id="_sorterThem" width="20" 
-                            height="20"
+                            <svg class="__swell __sortingBorder" id="_sorterThem" width="30" height="30"
                              viewBox="0 0 100 100">
                                 <circle r="48" cx="50" cy="50" />
                                 <path d="M 35 80 v -60 l 30 60 v -60" />
@@ -51,7 +50,7 @@ object BlogTemplate {
             <div class="__menuToggler __hidden" id="_menuToggler">
                 <div class="__svgButton" title="Open menu">                   
                         <a id="_toggleNavBar"> 
-                            <svg class="__swell" width="20" height="20" viewBox="0 0 100 100">
+                            <svg class="__swell" width="30" height="30" viewBox="0 0 100 100">
                                 <circle r="48" cx="50" cy="50"></circle>
                                 <path d="M 30 35 h 40" stroke-width="6"></path>
                                 <path d="M 30 50 h 40" stroke-width="6"></path>

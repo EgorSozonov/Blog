@@ -26,7 +26,6 @@ fun Application.configureRouting() {
     val mainUrl = "/" + C.appSubfolder + "{subUrl...}"
     val mediaUrl = "/" + C.appSubfolder + C.mediaSubfolder
     val scriptUrl = "/" + C.appSubfolder + C.scriptsSubfolder
-    val oneYearInSeconds = Duration.ofDays(365).toSeconds()
     routing {
         trace { application.log.trace(it.buildText()) }
 
@@ -40,7 +39,13 @@ fun Application.configureRouting() {
                 }
             }
         }
+        get("/" + C.appSubfolder) {
+            val queryParams = call.request.queryParameters.flattenEntries()
 
+            val responseHTML = Blog.buildGetResponse("", queryParams)
+
+            call.respondText(responseHTML, ContentType.Text.Html, HttpStatusCode.OK)
+        }
         get(mainUrl) {
             val subUrlChunks: List<String>? = call.parameters.getAll("subUrl")
             if (subUrlChunks == null) {

@@ -1,4 +1,3 @@
-let paramTemp = '';
 const homePath = "/blog/";
 let cLoc = []
 let modeTemp = false
@@ -133,7 +132,6 @@ function populateMenu(isFirstLoad) {
 
 function goToPage(path) {
     window.location = path;
-    //toggleNavBar();
 }
 
 function displayLeaf(leafStr) {
@@ -177,14 +175,12 @@ function strafe(indStrafe) {
 
 function reorderTemporal() {
     modeTemp = true;
-    paramTemp = '?o=t';
     clearLocation();
     populateMenu(false);
 }
 
 function reorderThematic() {
     modeTemp = false
-    paramTemp = ''
     clearLocation()
     populateMenu(false)
 }
