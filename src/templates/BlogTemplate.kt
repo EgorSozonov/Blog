@@ -67,9 +67,6 @@ object BlogTemplate {
     val template4: String = """</div>
         </div>
     </body>
-</html>    
+</html>
 """
-
-
-    val serialVersionUID : Long = 234L
 }
