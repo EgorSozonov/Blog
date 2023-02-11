@@ -38,9 +38,9 @@ function hideNavBar() {
 }
 
 function populateMenu(isFirstLoad) {
-    const navStateContainer = document.getElementById("_navState")
-    const navState = JSON.parse(navStateContainer.textContent)
     if (isFirstLoad === true) {
+        const navStateContainer = document.getElementById("_navState")
+        const navState = JSON.parse(navStateContainer.textContent)
         cLoc = navState.cLoc
         navThematic = navState.navThematic
         navTemporal = navState.navTemporal

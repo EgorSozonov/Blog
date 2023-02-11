@@ -8,7 +8,7 @@ run the "build" task, restore the dev config the .conf file, and then deploy the
 
 It has two ingestion folders: for core (global) stuff and for documents. Before first run, copy contents of 
 the "web" folder from the repo into the Constant.ingestCoreSubfolder, and add the subfolder "images" into it,
-with images "favicon.ico" and "404.png".
+with image and "404.png".
 
 A document must be an HTML file with all styles internal in the <head> tag,
 and all scripts must be external references of type="module". These references may either be to adjacent files 
