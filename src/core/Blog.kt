@@ -23,7 +23,7 @@ fun buildGetResponse(subUrl: String, queryParams: List<Pair<String, String>>): S
         checkNUpdate(this, rootPath)
         val documentContent = if (subUrl.isEmpty()) {
             docCache.rootPage
-        } else if (subUrl == "termsofuse") {
+        } else if (subUrl.lowercase() == "termsofuse") {
             docCache.termsOfUse
         } else {
             docCache.getDocument(subUrl) ?: docCache.notFound

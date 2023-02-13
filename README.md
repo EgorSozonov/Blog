@@ -1,14 +1,17 @@
 # Blog
 A simple CMS for an online blog
 
-## Instructions
+### Deploying
 
 To build, write the production config into config/application.conf (yes, apparently Ktor can't find .conf files at runtime), 
-run the "build" task, restore the dev config the .conf file, and then deploy the _bin/distributions/....tar file to the server.
+run the "build" task, restore the dev config in the application.conf file, and then deploy the _bin/distributions/ folder to the server.
 
-It has two ingestion folders: for core (global) stuff and for documents. Before first run, copy contents of 
-the "web" folder from the repo into the Constant.ingestCoreSubfolder, and add the subfolder "images" into it,
-with image and "404.png".
+
+### Usage
+
+It has two ingestion folders: _ingestCore for core (global) stuff and _ingest for content. Before first run, copy the contents of 
+the "web" folder from the repo into the _ingestCore, and add the subfolder "images" into it,
+with an image "404.png" for 404 pages.
 
 A document must be an HTML file with all styles internal in the <head> tag,
 and all scripts must be external references of type="module". These references may either be to adjacent files 
