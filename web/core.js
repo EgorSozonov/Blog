@@ -143,6 +143,9 @@ function displayLeaf(leafStr) {
     }
     let result = "";
     if (arrCapitals.length > 0) {
+        result = arrCapitals[0] > 0 ? (pageName.substring(0, 1).toUpperCase() +
+                                       pageName.substring(1, arrCapitals[0]) + " ")
+                                    : "";
         for (let j = 1; j < arrCapitals.length; ++j) {
             result = result + pageName.substring(arrCapitals[j - 1], arrCapitals[j]) + ' ';
         }
