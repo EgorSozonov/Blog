@@ -55,6 +55,40 @@ type Document struct {
     wasAddedDb bool
 }
 
+func (t *Blog) buildGetResponse(subUrl string, queryParams []Tu[string, string]) string {
+    checkNUpdate(t, rootPath)
+    var documentContent
+    if subUrl.len() == 0 {
+        documentContent = docCache.rootPage
+    } else if subUrl.toLower() == "termsofuse" {
+        documentContent = docCache.termsOfUse
+    } else {
+        documentContent = getDocument(subUrl)
+        if documentContent == nil {
+            documentContent = docCache.notFound
+        }
+    }
+    var modeTemporal = false
+    for _, qp := queryParams {
+        if qp.f1 == "temp" {
+            modeTemporal = true
+            break
+        }
+    }
+    var navTree
+    if modeTemporal {
+        navTree = navTime
+    } else {
+        navTree = navTopic
+    }
+
+    var r s.Builder
+    r.WriteString(template0)
+}
+
+
+
+
 //}}}
 //{{{ DocumentCache
 
@@ -364,17 +398,116 @@ func ingestFiles(rootPath string, docCache DocumentCache) Tu[[]IngestedFile, Ing
     ingestScripts(scriptNames, rootPath, docCache, false)
     moveDocs(docFiles, rootPath, ingestSubfolder, docsSubfolder)
 
-    return Tu.new(docFiles, ingestedCore)
+    return Tu{ docFiles, ingestedCore }
 }
 
-func ingestCoreFiles(rootPath string, intakeCorePath string,
+func ingestCoreFiles(rootPath string, ingestCorePath string,
                      docCache DocumentCache, lengthPrefix int) IngestedCore {
-    var js = moveFile()
-    var css = moveFile()
+    var js = moveFile(ingestCorePath, rootPath + scriptsSubfolder + globalsSubfolder, "core.js")
+    var css = moveFile(ingestCorePath, rootPath + mediaSubfolder + globalsSubfolder, "core.css")
+    var favicon = moveFile(ingestCorePath, rootPath + mediaSubfolder, "favicon.ico")
+
+    var mediaFiles = make(map[string]bool)
+    var ingestedCoreHtml = make([]IngestedFile)
+
+    var fileNotFound = File(ingestCorePath + "notFound.html")
+    var fileFooter = File(ingestCorePath + "footer.html")
+    var fileBasePage = File(ingestCorePath + "core.html")
+    var fileTerms = File(ingestCorePath + "termsOfUse.html")
+
+    var htmlNotFound *IngestedFIle
+    var htmlFooter *IngestedFIle
+    var htmlBasePage *IngestedFIle
+    var htmlTermsUse *IngestedFIle
+
+    if fileNotFound.exists() {
+        htmlNotFound = ingestDoc(fileNotFound, ingestCorePath, mediaFiles)
+        ingestedCoreHtml.add(htmlNotFound)
+    }
+    if fileFooter.exists() {
+        htmlFooter = ingestDoc(fileFooter, ingestCorePath, mediaFiles)
+        ingestedCoreHtml.add(htmlFooter)
+    }
+    if fileBasePage.exists() {
+        htmlBasePage = ingestDoc(fileBasePage, ingestCorePath, mediaFiles)
+        ingestedCoreHtml.add(htmlBasePage)
+    }
+    if fileTerms.exists() {
+        htmlTermsOfUse = ingestDoc(fileTerms, ingestCorePath, mediaFiles)
+        ingestedCoreHtml.add(htmlTermsOfUse)
+    }
+
+    var arrFiles, err = io.ReadDir(ingestCorePath)
+    if err != nil {
+        return nil
+    }
+
+    var scriptNames = make([]string)
+    for _, file := arrFiles {
+        if file.isFile() && file.name.endsWith(".js") && file.name.len() > 5 &&
+            file.length < 500000 {
+            scriptNames.add(file.absolutePath)
+        }
+    }
+    moveMediaFiles(mediaFiles, rootPath, lengthPrefix)
+    ingestScripts(scriptNames, rootPath, docCache, true)
+    moveDocs(ingestedCoreHtml, rootPath, ingestCoreSubfolder, coreSubfolder)
+
+    return IngestedCore{ js, css, htmlNotFound, htmlFooter, htmlBasePage, htmlTermsUse }
+}
+
+func ingestDoc(file File, ingestPath string, mediaFiles map[string]bool) *IngestedFile {
+    /// Performs ingestion of an input file: reads its contents, detects referenced
+    /// media files and script modules, rewrites the links to them, and decides whether this is an
+    /// update/new doc or a delete.
+    var lastModified = file.lastModified()
+    var indLastDot = file.path.lastIndexOf(".")
+    var fileSubpath = file.path.substring(ingestPath.len(), indLastDot) // "topic/subt/file" w/o ext
+    var indLastSlash = file.path.lastIndexOf("/")
+    var fileSubfolder = file.path.substring(ingestPath.len(), indLastSlash + 1) // "topic/sub"
+    var fileContent = file.readText()
+    var content = getHtmlBodyStyle(fileContent, ingestPath, fileSubpath, mediaFiles)
+    if content.len() < 10 && content.trim() == "" {
+        return IngestedFile { Delete , fileSubpath }
+    }
+
+    var jsModuleNames = parseJokescriptModuleNames(fileContent, fileSubfolder)
+
+    return IngestedFile { CreateUpdate, fileSubpath, content, styleContent, lastModified, jsModuleNames)
+
+}
+
+func ingestScripts(scriptNames []string, rootPath string, docCache DocumentCache, isGlobal bool) {
+    /// Ingests script module files, determines their filenames, puts them into the cache folder.
+    targetPath = rootPath + scriptsSubfolder
+    io.CreateDirectories(targetPath)
+}
+
+func moveMediaFiles() {
+    /// Moves media files references to which were detected to the /_m subfolder.
+}
+
+func moveDocs() {
+    /// Updates the document stockpile on disk according to the list of ingested files.
+}
+
+func readCachedDocs() {
+
+}
+
+func readCachedCore() {
+}
+
+func readCachedScripts() {
+
+}
+
+func moveFile() {
 }
 
 //}}}
 //{{{ Rewriter
+
 
 func rewriteLinks(content string, ingestPath string, fileSubpath string,
                   mediaFiles map[string]bool) {
@@ -464,15 +597,45 @@ func rewriteScriptImports() {
     while i < spl.len() && spl[i].startsWith("import") {
         ++i
     }
-    var scriptPrefix = "/$appSubfolder$scriptsSubfolder"
+    var scriptPrefix = "/" + appSubfolder + scriptsSubfolder
     for j := range i {
+        var indFrom = spl[j].indexOf("\"")
+        if indFrom < 0 {
+            return ""
+        }
+        var tail = spl[j].substring(indFrom + 1)
+        if tail.startsWith("global/")) {
+            spl[j] = spl[j].substring(0, indFrom + 1) + scriptPrefix +
+                globalsSubfolder + spl[j].substring(indFrom + 8) // +8 for `"global/`
+        } else if tail.startsWith("./") {
+            spl[j] = spl[j].substring(0, indFrom + 1) + scriptPrefix +
+                subfolder + spl[j].substring(indFrom + 3) // +3 for `"./`
+        } else {
+            return ""
+        }
     }
-
+    return spl.joinToString("\n")
 }
 
 func getHtmlBodyStyle() {
     /// Gets the contents of the "body" tag inside the HTML, as well as contents of the
     /// "style" tag inside the head
+    var indStart = html.indexOf("<body>")
+    var indEnd = html.lastIndexOf("</body>")
+    if indStart < 0 || indEnd < 0 || (indEnd - indStart) < 7 {
+        return Tu(html, "")
+    }
+    var bodyRewritten = rewriteLinks(html.substring(indStart + 6, indEnd), ingestPath,
+        fileSubpath, mediaFiles)
+    var indStyleStart = html.indexOf("<style>")
+    var indStyleEnd = html.indexOf("</style>")
+    var style
+    if indStyleStart > -1 && indStyleEnd > -1 && (indStyleEnd - indStyleStart) >= 8 {
+        style = html.substring(indStyleStart + 7, indStyleEnd).trim()
+    } else {
+        style = ""
+    }
+    return Tu{bodyRewritten, style}
 }
 
 
@@ -501,5 +664,87 @@ func (t []T) indexOf[T any](needle T) int {
     }
     return -1
 }
+
+func (t *string) pathize() *string {
+    if t.endsWith("/") {
+        return t
+    } else {
+        return t + "/"
+    }
+}
+
+//}}}
+//{{{ Templates
+
+const template0 = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; base-uri 'self';" />
+`
+
+const templateHeadCloseBodyStart = `
+</head>
+<body>
+    <div class="__wrapper">
+        <div class="__navbar" id="_theNavBar">
+            <div class="__menuTop">
+                <div class="__svgButton" title="Temporal sorting">
+                    <a id="_reorderTemporal" title="Temporal sorting">
+                        <svg id="_sorterTemp" class="__swell" width="30" height="30"
+                            viewBox="0 0 100 100">
+                            <circle r="48" cx="50" cy="50" />
+                            <path d="M 35 20 h 30 c 0 30 -30 30 -30 60 h 30
+                                c 0 -30 -30 -30 -30 -60" />
+                        </svg>
+                    </a>
+                </div>
+                <div class="__svgButton">
+                    <a href="http://sozonov.site" title="Home page">
+                        <svg id="__homeIcon" class="__swell" width="30" height="30"
+                         viewBox="0 0 100 100">
+                            <circle r="48" cx="50" cy="50" />
+                            <path d="M 30 45 h 40 v 25 h -40 v -25 " />
+                            <path d="M 22 50 l 28 -25 l 28 25" />
+                        </svg>
+                    </a>
+                </div>
+                <div class="__svgButton">
+                    <a id="_reorderThematic" title="Thematic sorting">
+                        <svg class="__swell __sortingBorder" id="_sorterThem"
+                             width="30" height="30"
+                             viewBox="0 0 100 100">
+                            <circle r="48" cx="50" cy="50" />
+                            <path d="M 35 80 v -60 l 30 60 v -60" />
+                        </svg>
+                </a>
+                </div>
+            </div>
+            <div class="__menu" id="__theMenu"></div>
+        </div>
+
+        <div class="__divider" id="_divider">&lt;</div>
+        <div class="__menuToggler __hidden" id="_menuToggler">
+            <div class="__svgButton" title="Open menu">
+                    <a id="_toggleNavBar">
+                        <svg class="__swell" width="30" height="30" viewBox="0 0 100 100">
+                            <circle r="48" cx="50" cy="50"></circle>
+                            <path d="M 30 35 h 40" stroke-width="6"></path>
+                            <path d="M 30 50 h 40" stroke-width="6"></path>
+                            <path d="M 30 65 h 40" stroke-width="6"></path>
+                        </svg>
+                    </a>
+            </div>
+        </div>
+
+
+        <div class="__content">
+`
+
+const template4 = `</div>
+        </div>
+    </body>
+</html>
+`
 
 //}}}
