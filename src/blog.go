@@ -86,9 +86,6 @@ func (t *Blog) buildGetResponse(subUrl string, queryParams []Tu[string, string])
     r.WriteString(template0)
 }
 
-
-
-
 //}}}
 //{{{ DocumentCache
 
@@ -151,7 +148,7 @@ func (t DocumentCache) getNewDocuments() Document[] {
 
 func (t DocumentCache) updateCoreDocFromIngested(ingested IngestedFile,
                                                  existing Document) Document {
-    return if ingested != nil && ingested == CreateUpdate {
+    return if ingested != nil && ingested.(type) == CreateUpdate {
         Document{ingested.content, ingested.jsModules, ingested.styleContent != "", "",
                 ingested.updatedAt, -1, false}
     } else {
@@ -362,6 +359,7 @@ func nameOfMonth(month Month) string {
     case january: return "Jan"
     }
 }
+
 //}}}
 //{{{ Datasource: BlogFile
 
@@ -370,11 +368,25 @@ type BlogFile struct {
     ///  as well as returns the results so that the docs and core files can be updated in memory
 }
 
-type IngestedFile struct {
-    | CreateUpdate { fullPath string, content string, styleContent string,
-                     modifTime Ts, jsModules []string }
-    | Delete { fullPath string }
+interface IngestedFile {
+    IngestedFileDummy()  // empty method just to satisfy the interface
 }
+
+type CreateUpdate struct {
+    fullPath string
+    content string
+    styleContent string
+    modified Ts
+    jsModules []string
+}
+
+type Delete struct {
+    fullPath string
+}
+
+func (*CreateUpdate) IngestedFileDummy() {}
+func (*Delete) IngestedFileDummy() {}
+
 
 type IngestedCore struct {
     js string, css string, htmlNotFound IngestedFile, htmlFooter IngestedFile,
@@ -483,12 +495,12 @@ func ingestDoc(file File, ingestPath string, mediaFiles map[string]bool) *Ingest
     var fileContent = file.readText()
     var content = getHtmlBodyStyle(fileContent, ingestPath, fileSubpath, mediaFiles)
     if content.len() < 10 && content.trim() == "" {
-        return IngestedFile { Delete , fileSubpath }
+        return Delete { fileSubpath }
     }
 
     var jsModuleNames = parseJokescriptModuleNames(fileContent, fileSubfolder)
 
-    return IngestedFile { CreateUpdate, fileSubpath, content, styleContent, lastModified, jsModuleNames)
+    return CreateUpdate { fileSubpath, content, styleContent, lastModified, jsModuleNames)
 
 }
 
@@ -549,7 +561,7 @@ func moveDocs(incomingFiles []IngestedFile, rootPath string,
     var targetPrefix = rootPath + targetSubfolder
     var targetMediaPrefix = rootPath + mediaSubfolder
     for _, iFile := incomingFiles {
-        if iFile.isCreateUpdate {
+        if iFile.(type) == CreateUpdate {
             var nameId = iFlie.fullPath.replace(" ", "")
             var sourceHtml = File(rootPath + sourceSubfolder + iFile.fullPath + ".html")
             var fTarget = (targetPrefix + nameId + ".html")
@@ -570,7 +582,7 @@ func moveDocs(incomingFiles []IngestedFile, rootPath string,
                 depsTarget.writeText(iFile.jsModules.joinToString("\n")
             }
             os.Remove(sourceHtml)
-        } else if iFile.isDelete {
+        } else if iFile.(type) == IsDelete {
             var sourceFile = File(rootPath + ingestSubfolder + iFile.fullPath + ".html")
             os.Remove(targetPrefix + iFile.fullPath.replace(" ", "") + ".html")
             os.Remove(targetPrefix + iFile.fullPath.replace(" ", "") + ".css")
@@ -659,7 +671,6 @@ func moveFile(sourcePath string, targetPath string, fNShort string) {
 
 //}}}
 //{{{ Rewriter
-
 
 func rewriteLinks(content string, ingestPath string, fileSubpath string,
                   mediaFiles map[string]bool) {
@@ -789,7 +800,6 @@ func getHtmlBodyStyle() {
     }
     return Tu{bodyRewritten, style}
 }
-
 
 //}}}
 //{{{ Utils
