@@ -6,7 +6,7 @@ import (
     "fmt"
     "time"
     s "strings"
-    io "io/ioutil"
+    io "os"
 )
 
 type Ts time.Time
@@ -370,6 +370,21 @@ type BlogFile struct {
     ///  as well as returns the results so that the docs and core files can be updated in memory
 }
 
+type IngestedFile struct {
+    | CreateUpdate { fullPath string, content string, styleContent string,
+                     modifTime Ts, jsModules []string }
+    | Delete { fullPath string }
+}
+
+type IngestedCore struct {
+    js string, css string, htmlNotFound IngestedFile, htmlFooter IngestedFile,
+    htmlRoot IngestedFile, htmlTermsUse IngestedFile
+}
+
+type IngestedJsModule struct {
+    fullPath string, content String, modifTime Ts
+}
+
 func ingestFiles(rootPath string, docCache DocumentCache) Tu[[]IngestedFile, IngestedCore] {
     var ingestCorePath = rootPath + ingestCoreSubfolder
     var lengthCorePrefix = ingestCorePath.length
@@ -481,28 +496,165 @@ func ingestScripts(scriptNames []string, rootPath string, docCache DocumentCache
     /// Ingests script module files, determines their filenames, puts them into the cache folder.
     targetPath = rootPath + scriptsSubfolder
     io.CreateDirectories(targetPath)
+
+    var prefixLength = rootPath.len()
+    if isGlobal {
+        prefixLength += ingestCoreSubfolder.len()
+    } else {
+        prefixLength += ingestSubfolder.len()
+    }
+    for _, fN := scriptNames {
+        var sourceFile = File(fN)
+        var scriptContent = sourceFile.readText()
+        var subfolder = fN.substring(prefixLength, fN.len() - sourceFile.name.len())
+        var rewrittenContent = rewriteScriptImports(scriptContent, subfolder)
+
+        var modId
+        if isGlobal {
+            modId = globalsSubfolder + fN.substring(prefixLength, fN.length - 3) // -3 for ".js"
+        } else {
+            modId = subfolder + sourceFile.name.substring(0, sourceFile.name.len() - 3)
+        }
+        docCache.insertModule(modId)
+        var targetFile = File(targetPath + modId + ".js")
+
+        if subfolder.len() > 0 {
+            io.CreateDirs(targetPath + subfolder)
+        } else {
+            io.CreateDirs(targetPath + globalsSubfolder)
+        }
+        targetFile.writeText(rewrittenContent)
+        sourceFile.delete()
+    }
 }
 
-func moveMediaFiles() {
+func moveMediaFiles(mediaFiles map[string]bool, rootPath string, lengthPrefix int,
+                    targetSubfolder string) {
     /// Moves media files references to which were detected to the /_m subfolder.
+    var targetPath = rootPath + mediaSubfolder + targetSubfolder
+    for _, fN := mediaFiles {
+        var sourceFile = File(fN)
+        var targetFile = File(targetPath + fN.substring(lengthPrefix))
+        if targetFile.exists() {
+            targetFile.delete()
+        }
+        sourceFile.copyTo(File(targetPath + fN.substring(lengthPrefix)))
+        sourceFile.delete()
+    }
 }
 
-func moveDocs() {
+func moveDocs(incomingFiles []IngestedFile, rootPath string,
+              sourceSubfolder string, targetSubfolder string) {
     /// Updates the document stockpile on disk according to the list of ingested files.
+    var targetPrefix = rootPath + targetSubfolder
+    var targetMediaPrefix = rootPath + mediaSubfolder
+    for _, iFile := incomingFiles {
+        if iFile.isCreateUpdate {
+            var nameId = iFlie.fullPath.replace(" ", "")
+            var sourceHtml = File(rootPath + sourceSubfolder + iFile.fullPath + ".html")
+            var fTarget = (targetPrefix + nameId + ".html")
+            os.Remove(fTarget)
+            fTarget.parentFile.mkdirs()
+            fTarget.writeText(iFile.content)
+
+            fStyleTarget = (targetMediaPrefix + nameId + ".css")
+            os.Remove(fStyleTarget)
+            if iFile.styleContent != "" {
+                fStyleTarget.parentFile.mkdirs()
+                fStyleTarget.writeText(iFile.styleContent)
+            }
+
+            if iFile.jsModules.len() > 0 {
+                var depsTarget = File(targetPrefix + nameId + ".deps")
+                os.Remove(depsTarget)
+                depsTarget.writeText(iFile.jsModules.joinToString("\n")
+            }
+            os.Remove(sourceHtml)
+        } else if iFile.isDelete {
+            var sourceFile = File(rootPath + ingestSubfolder + iFile.fullPath + ".html")
+            os.Remove(targetPrefix + iFile.fullPath.replace(" ", "") + ".html")
+            os.Remove(targetPrefix + iFile.fullPath.replace(" ", "") + ".css")
+            os.Remove(targetPrefix + iFile.fullPath.replace(" ", "") + ".deps")
+            os.Remove(sourceFile)
+        }
+    }
 }
 
-func readCachedDocs() {
-
+func readCachedDocs(rootPath string, cache DocumentCache) {
+    var docsDirN = rootPath + docsSubfolder
+    var docsDir = File(docsDirN)
+    var prefixLength = docsDirN.len()
+    var fileList
+    for _, file := io.ReadDir(docsDir) {
+        if file.isFile && file.name.endsWith(".html") && file.name.len() > 5
+              && file.len() < 2000000 {
+            fileList.add(file)
+        }
+    }
+    for _, fi := fileList {
+        var address = fi.path.substring(prefixLength, fi.path.length - 5) // -5 for the ".html"
+        var depsFile = File(docsDir + address + ".deps")
+        var deps
+        if depsFile.exists() {
+            deps = depsFile.readText().split("\n")
+        } else {
+            deps = make([]string)
+        }
+        var hasCSS = File(rootPath + mediaSubfolder + address + ".css").exists()
+        var doc = Document { fi.readText(), deps, hasCss, address, fi.lastModified, -1, false }
+        cache.addDocument(address, doc)
+    }
 }
 
-func readCachedCore() {
+func readCachedCore(rootPath string, cache DocumentCache) {
+    var ingestDirN = rootPath + coreSubfolder
+
+    var fileJs = File(ingestDirN + "core.js")
+    if fileJs.exists() {
+        cache.coreJS = fileJs.readText()
+    }
+
+    var fileHtmlRoot = File(ingestDirN + "core.html")
+    if fileHtmlRoot.exists() {
+        cache.rootPage = Document(fileHtmlRoot.readText(), make([]),
+                                  false, "", Time.MIN, -1, false)
+    }
+    var fileCss = File(ingestDirN + "core.css")
+    if fileCss.exists() {
+        cache.coreCSS = fileCss.readText()
+    }
 }
 
-func readCachedScripts() {
-
+func readCachedScripts(rootPath string, docCache DocumentCache) {
+    var ingestDirN = rootPath + scriptsSubfolder
+    var ingestDir = File(ingestDirN)
+    var prefixLength = ingestDirN.len()
+    var fileList
+    for _, fi := io.ReadDir(ingestDirN) {
+        if fi.isFile && fi.name.endsWith(".js") && fi.name.len() > 5 && fi.len() < 500000 {
+            fileList.add(fi)
+        }
+    }
+    for _, fi := fileList {
+        var shortFileName = fi.path.substring(prefixLength, fi.path.len() - 3) // -3 for the ".js"
+        docCache.insertModule(shortFileName)
+    }
 }
 
-func moveFile() {
+func moveFile(sourcePath string, targetPath string, fNShort string) {
+    var file = File(sourcePath + fNShort)
+    var result = ""
+    if file.exists() {
+        result = file.readText()
+        var fTarget = File(targetPath + fNShort)
+        if fTarget.exists() {
+            fTarget.delete()
+        }
+        fTarget.parentFile.mkdirs()
+        fTarget.writeText(result)
+        file.delete()
+    }
+    return result
 }
 
 //}}}
@@ -665,11 +817,39 @@ func (t []T) indexOf[T any](needle T) int {
     return -1
 }
 
-func (t *string) pathize() *string {
+
+func (t string) pathize() string {
     if t.endsWith("/") {
         return t
     } else {
         return t + "/"
+    }
+}
+
+
+func (t string) len() int {
+    return len(t)
+}
+
+
+func printAllFiles(dirN string) {
+    files, err := os.ReadDir(dirN)
+    if err != nil {
+        return
+    }
+
+    for _, fi := range files {
+        fmt.Println(readFile(pathize(dirN) + fi.Name()))
+    }
+}
+
+
+func readFile(fN string) string {
+    fi, err := os.ReadFile(fN)
+    if err == nil {
+        return string(fi)
+    } else {
+        return ""
     }
 }
 
