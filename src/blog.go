@@ -5,7 +5,7 @@ package src
 import (
     "fmt"
     "time"
-    s "strings"
+    "strings"
     io "os"
 )
 
@@ -82,7 +82,7 @@ func (t *Blog) buildGetResponse(subUrl string, queryParams []Tu[string, string])
         navTree = navTopic
     }
 
-    var r s.Builder
+    var r strings.Builder
     r.WriteString(template0)
 }
 
@@ -98,15 +98,15 @@ func (t DocumentCache) getModule(modId string) String {
 }
 
 func (t DocumentCache) getDocument(path0 string) Document {
-    if s.HasSuffix(path0, ".html") {
-        return t.cache[s.ToLower(path0[0, path0.length - 5])]
+    if path0.endsWith(".html") {
+        return t.cache[path0[0, path0.length - 5].toLower()]
     } else {
-        return t.cache[s.ToLower(path0)]
+        return t.cache[path0.toLower()]
     }
 }
 
 func (t DocumentCache) addDocument(path0 string, newDoc Document) {
-    var path = s.ToLower(path0)
+    var path = s.toLower(path0)
     t.cache[path] = newDoc
 }
 
@@ -165,7 +165,7 @@ type NavTree struct {
 }
 
 func (t NavTree) createBreadcrumbs(subAddress string) []int {
-    spl = s.Split(subAddress, "/")
+    spl = subAddress.split("/")
     result = make([]int, len(spl))
     if t.name != "" || len(t.children) == 0 {
         return make([]int, 0)
@@ -621,9 +621,9 @@ func readCachedDocs(rootPath string, cache DocumentCache) {
 func readCachedCore(rootPath string, cache DocumentCache) {
     var ingestDirN = rootPath + coreSubfolder
 
-    var fileJs = File(ingestDirN + "core.js")
-    if fileJs.exists() {
-        cache.coreJS = fileJs.readText()
+    var fileJs = readFile(ingestDirN + "core.js")
+    if fileJs != "" {
+        cache.coreJS = fileJs
     }
 
     var fileHtmlRoot = File(ingestDirN + "core.html")
@@ -654,18 +654,14 @@ func readCachedScripts(rootPath string, docCache DocumentCache) {
 }
 
 func moveFile(sourcePath string, targetPath string, fNShort string) {
-    var file = File(sourcePath + fNShort)
-    var result = ""
-    if file.exists() {
-        result = file.readText()
-        var fTarget = File(targetPath + fNShort)
-        if fTarget.exists() {
-            fTarget.delete()
-        }
-        fTarget.parentFile.mkdirs()
-        fTarget.writeText(result)
-        file.delete()
+    result = readFile(sourcePath + fNShort)
+    (targetPath + fNShort).deleteFile()
+    if fTarget.exists() {
+        fTarget.delete()
     }
+    fTarget.parentFile.mkdirs()
+    fTarget.writeText(result)
+    file.delete()
     return result
 }
 
@@ -841,6 +837,17 @@ func (t string) len() int {
     return len(t)
 }
 
+func (t string) toLower() int {
+    return strings.ToLower(t)
+}
+
+func (t string) endsWith(s string) int {
+    return strings.HasSuffix(t, s)
+}
+
+func (t string) split(s string) int {
+    return strings.Split(t, s)
+}
 
 func printAllFiles(dirN string) {
     files, err := os.ReadDir(dirN)
@@ -862,6 +869,8 @@ func readFile(fN string) string {
         return ""
     }
 }
+
+
 
 //}}}
 //{{{ Templates
