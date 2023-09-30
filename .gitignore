@@ -3,8 +3,8 @@ gradle/*
 _bin/*
 .idea/*
 build/
-_bin/*
 !**/src/main/**/build/
 !**/src/test/**/build/
+obj/*
 
 tags

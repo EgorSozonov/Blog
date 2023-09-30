@@ -33,7 +33,7 @@ _bin/cache: | _bin
 / mkdir -p _bin/cache
 
 build: | _bin ## Build the project
-/ go build -o _bin/blog main.go
+/ dotnet build
 
 run: 
 / go run main.go
