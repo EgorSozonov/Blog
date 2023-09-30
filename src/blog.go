@@ -7,6 +7,7 @@ import (
     "time"
     "strings"
     io "os"
+    "sync"
 )
 
 type Ts time.Time
@@ -27,69 +28,88 @@ const coreSubfolder = "_core/"
 //{{{ Core
 
 type Blog struct {
-    docCache DocumentCache
-    navTopic NavTree
-    navTime NavTree
+    docCache DocCache
+    navTree *NavTree
+    navTopic *NavTree
+    navTime *NavTree
     updatedAt Ts
-    rootPath string
+    rootPath String
+    mutex sync.Mutex
 }
 
-type DocumentCache struct {
-    cache map[string]Document
-    scripts map[string]bool
-    coreJS string
-    coreCSS string
-    notFound Document
-    footer Document
-    rootPage Document
-    termsOfUse Document
+type DocCache struct {
+    cache map[String]Document
+    scripts map[String]bool
+    coreJs String
+    coreCss String
+    notFound *Document
+    footer *Document
+    rootPage *Document
+    termsOfUse *Document
 }
 
 type Document struct {
-    content string
-    scriptDeps string[]
-    hasCSS bool
-    pathCaseSen string
+    cont String
+    scriptDeps []String
+    hasCss bool
+    pathCaseSen String
     modified Ts
     pageId int
     wasAddedDb bool
 }
 
-func (t *Blog) buildGetResponse(subUrl string, queryParams []Tu[string, string]) string {
-    checkNUpdate(t, rootPath)
-    var documentContent
+func createDocument(cont String, scriptDeps []String, hasCss bool, pathCaseSen String,
+                    modified Ts) *Document {
+    return &Document {
+        cont: cont, scriptDeps: scriptDeps,
+        hasCss: hasCss, pathCaseSen: pathCaseSen,
+        modified: modified, pageId: -1, wasAddedDb: false,
+    }
+}
+
+func createIngested(js String, css String, htmlNotFound Ingested, htmlFooter Ingested,
+        htmlRoot Ingested, htmlTermsUse Ingested) *IngestedCore {
+    return &IngestedCore {
+        js: js, css: css, htmlNotFound: htmlNotFound, htmlFooter: htmlFooter, htmlRoot: htmlRoot,
+        htmlTermsUse: htmlTermsUse,
+    }
+}
+
+func (t *Blog) buildGetResponse(subUrl String, queryParams []Tu[String, String]) String {
+    t.checkNUpdate(t.rootPath)
+    var documentContent *Document
     if subUrl.len() == 0 {
-        documentContent = docCache.rootPage
+        documentContent = t.docCache.rootPage
     } else if subUrl.toLower() == "termsofuse" {
-        documentContent = docCache.termsOfUse
+        documentContent = t.docCache.termsOfUse
     } else {
-        documentContent = getDocument(subUrl)
+        documentContent = t.docCache.getDocument(subUrl)
         if documentContent == nil {
-            documentContent = docCache.notFound
+            documentContent = t.docCache.notFound
         }
     }
     var modeTemporal = false
-    for _, qp := queryParams {
+    for _, qp := range queryParams {
         if qp.f1 == "temp" {
             modeTemporal = true
             break
         }
     }
-    var navTree
     if modeTemporal {
-        navTree = navTime
+        t.navTree = t.navTime
     } else {
-        navTree = navTopic
+        t.navTree = t.navTopic
     }
 
     var r strings.Builder
     r.WriteString(template0)
+    return String(r.String())
 }
 
 //}}}
-//{{{ DocumentCache
+//{{{ DocCache
 
-func (t DocumentCache) getModule(modId string) String {
+func (t DocCache) getModule(modId String) String {
     if _, ok := t.scriptCache[modId]; ok {
         return modId + ".js"
     } else {
@@ -97,39 +117,49 @@ func (t DocumentCache) getModule(modId string) String {
     }
 }
 
-func (t DocumentCache) getDocument(path0 string) Document {
+func (t DocCache) getDocument(path0 String) *Document {
     if path0.endsWith(".html") {
-        return t.cache[path0[0, path0.length - 5].toLower()]
+        return t.cache[path0.subString(0, path0.length - 5).toLower()]
     } else {
         return t.cache[path0.toLower()]
     }
 }
 
-func (t DocumentCache) addDocument(path0 string, newDoc Document) {
-    var path = s.toLower(path0)
+func (t DocCache) addDocument(path0 String, newDoc Document) {
+    var path = path0.toLower()
     t.cache[path] = newDoc
 }
 
-func (t DocumentCache) ingestAndRefresh(rootPath string) {
+func (t DocCache) ingestAndRefresh(rootPath String) {
     /// Loads/reloads a set of files and their contents into the cache.
     /// Strips HTML outside the <body> tag so that only the relevant contents make it into the cache.
     if len(t.cache) == 0 {
         // The order must be as follows: first read the core stuff, then the scripts, then the docs
         // This is because core stuff is not overwritten by scripts, and docs depend on scripts and core
-        readCachedCore(rootPath, t)
-        readCachedScripts(rootPath, t)
-        readCachedDocs(rootPath, t)
+        t.readCachedCore(rootPath)
+        t.readCachedScripts(rootPath)
+        t.readCachedDocs(rootPath)
     }
 
-    fmt.Println("ingesting and refreshing at root path $rootPath")
+    fmt.Println("ingesting and refreshing at root path " + rootPath)
     ingestedDocs, ingestedCore = ingestFiles(rootPath, t)
-    if len(ingestedTocs) > 0 {
-        for i := range ingestedDocs {
-            ???
+    if ingestedTocs.len() > 0 {
+        for i, iD := range ingestedDocs {
+            var key = iD.fullPath.toLower().replace(" ", "")
+            if iD.(type) == CreateUpdate {
+                t.cache[key] = createDocument(
+                    inFile.content, inFile.jsModules,
+                    inFile.styleContent != "", inFile.fullPath.replace(" ", ""),
+                    inFile.modifTime,
+                )
+            } else { // Delete
+                if t.cache[key] != nil { delete(t.cache, key) }
+            }
         }
     }
-    if ingestedCore.js != "" { t.coreJS = ingestedCore.js }
-    if ingestedCore.css != "" { t.coreCSS = ingestedCore.css }
+
+    if ingestedCore.js != "" { t.coreJs = ingestedCore.js }
+    if ingestedCore.css != "" { t.coreCss = ingestedCore.css }
     t.notFound = updateCoreDocFromIngested(ingestedCore.htmlNotFound, t.notFound)
     t.rootPage = updateCoreDocFromIngested(ingestedCore.htmlRoot, t.rootPage)
     t.footer = updateCoreDocFromIngested(ingestedCore.htmlFooter, t.footer)
@@ -137,34 +167,58 @@ func (t DocumentCache) ingestAndRefresh(rootPath string) {
 
 }
 
-func (t DocumentCache) toPageArray() Document[] {
-    /// Returns an array of [(original path) date] useful for constructing navigation trees.
-    return t.cache.entries.filter(func(a) {!a.value.wasAddedDb}).map(func(a) {a.value})
+func (t DocCache) toPageArray() []Tu[String, Ts] {
+    /// Returns an array of [(originalPath) date] useful for constructing navigation trees.
+    var result = make([]Tu[String, Ts])
+    for _, v := range t.cache { result = result.add(Tu{ f1: v.pathCaseSen, f2: v.modifiedDate }) }
+    return result
 }
 
-func (t DocumentCache) getNewDocuments() Document[] {
-    return t.cache.entries.filter(func(a) {!a.value.wasAddedDb}).map(func(a) {a.value})
+func (t DocCache) getNewDocuments() []Document {
+    var result = make([]Document)
+    for _, v := range t.cache { if !v.wasAddedDb { result = result.add(v) } }
+    return result
 }
 
-func (t DocumentCache) updateCoreDocFromIngested(ingested IngestedFile,
-                                                 existing Document) Document {
-    return if ingested != nil && ingested.(type) == CreateUpdate {
-        Document{ingested.content, ingested.jsModules, ingested.styleContent != "", "",
-                ingested.updatedAt, -1, false}
+func (t DocCache) updateCoreDocFromIngested(
+        ingested Ingested, existing Document) Document {
+    if ingested != nil && ingested.(type) == CreateUpdate {
+        return createDocument(
+            ingested.content, ingested.jsModules, ingested.styleContent != "", "", ingested.updatedAt,
+        )
     } else {
-        existing
+        return existing
     }
 }
+
+func (t *Blog) checkNUpdate(rootPath String) { //, conn: Connection) {
+    /// Top-level updater function for documents and templates
+    var dtNow = time.Now()
+    if (time.Sub(t.dtNavUpdated, dtNow).Minutes() <= 5) {
+        return
+    }
+
+    t.mutex.Lock()
+    defer t.mutex.Unlock()
+
+    t.docCache.ingestAndRefresh(rootPath)
+    var navTrees = createNavTrees(t.docCache)
+    t.navTopic = navTrees.first
+    t.navTime = navTrees.second
+    t.dtNavUpdated = dtNow
+}
+
+
 
 //}}}
 //{{{ NavTree
 
 type NavTree struct {
-    name string
+    name String
     children []NavTree
 }
 
-func (t NavTree) createBreadcrumbs(subAddress string) []int {
+func (t NavTree) createBreadcrumbs(subAddress String) []int {
     spl = subAddress.split("/")
     result = make([]int, len(spl))
     if t.name != "" || len(t.children) == 0 {
@@ -189,53 +243,54 @@ func (t NavTree) createBreadcrumbs(subAddress string) []int {
     return result
 }
 
-func (t NavTree) createBreadcrumbsTemporal(subAddress string) []int {
+func (t NavTree) createBreadcrumbsTemporal(subAddress String) []int {
     /// Make breadcrumbs that trace the way to this file through the navigation tree.
     /// Searches the leaves only, which is necessary for tempooral nav trees.
-    var stack = Stack[Tu[NavTree, int]]{}
-    stack.push(Tu { t, 0 })
-    while stack.any() {
-        var top = stack.peek()
+    var st = createStack[Tu[NavTree, int]]()
+    st.push(tu(t, 0))
+    for st.hasItems() {
+        var top = st.peek()
         if top.f2 < top.f1.children.len() {
-            var next =
-                stack.push(Tu { next, 0 })
+            var next = top.f1.children[top.f2]
+            if next.children.len() > 0 {
+                st.push(tu(next, 0))
             } else {
                 if next.name == subAddress {
-                    result = make([]int, stack.len())
-                    for i := range stack {
-                        result[i] = stack[i].f2
+                    result = make([]int, st.len())
+                    for i := range st {
+                        result[i] = st[i].f2
                     }
                     return result
                 }
-                ++top.f2
+                top.f2++
             }
         } else {
-            stack.pop()
-            if stack.len() > 0 {
-                var prevTop = stack.peek()
-                ++prevTop.f2
+            st.pop()
+            if st.len() > 0 {
+                var prevTop = st.peek()
+                prevTop.f2++
             }
         }
     }
     return make([]int, 0)
 }
 
-func (t NavTree) toJson() string {
-    var stack = Stack[Tu[NavTree, int]]
+func (t NavTree) toJson() String {
+    var st = createStack[Tu[NavTree, int]]()
     if t.children.len() == 0 {
         return ""
     }
-    val result = StringBuilder(100)
-    stack.push(Tu{t, 0})
-    while stack.len() > 0 {
-        var top = stack.peek()
+    var result strings.Builder
+    st.push(tu(t, 0))
+    for st.len() > 0 {
+        var top = st.peek()
         if top.f2 < top.f1.children.len() {
             var next = top.f1.children[top.f2]
             if next.children.len() > 0 {
                 result.append("[\"")
                 result.append(next.name)
                 result.append("\", [")
-                stack.push(Tu{ next, 0 })
+                st.push(tu(next, 0))
             } else {
                 result.append("[\"")
                 result.append(next.name)
@@ -246,9 +301,9 @@ func (t NavTree) toJson() string {
                 }
             }
         } else {
-            stack.pop()
-            if stack.len() > 0 {
-                var parent = stack.peek()
+            st.pop()
+            if st.len() > 0 {
+                var parent = st.peek()
                 if parent.f2 < parent.f1.children.len() {
                     result.append("]], ")
                 } else {
@@ -256,19 +311,19 @@ func (t NavTree) toJson() string {
                 }
             }
         }
-        ++top.f2
+        top.f2++
     }
     return result.toString()
 }
 
-func createNavTree(docCache DocumentCache) Tu[NavTree, NavTree] {
+func createNavTrees(docCache DocCache) Tu[NavTree, NavTree] {
     var arrNavigation = docCache.toPageArray()
     var topical = topicalOf(arrNavigation)
     var temporal = temporalOf(arrNavigation)
-    return Tu { topical, temporal }
+    return tu(topical, temporal)
 }
 
-func comparatorFolders(x, y Tri[string, Ts, []string) {
+func comparatorFolders(x, y Tri[String, Ts, []String]) {
     var folderLengthCommon = min(x.f3.len(), y.f3.len())
     for i := range folderLengthCommon {
         var cmp = x.f3[i].compareTo(y.f3[i])
@@ -283,31 +338,34 @@ func comparatorFolders(x, y Tri[string, Ts, []string) {
     }
 }
 
-func topicalOf(pages []Tu[string, Ts]) NavTree {
-    var pagesByName = pages.map(func(x) { x.f1, x.f2, x.f1.split("/") })
-                            .sortWith(comparatorFolders)
-    var stack = make([]NavTree, 4)
-    var root = NavTree{ "", make([], 0) }
-    stack.add(root)
+func topicalOf(pages []Tu[String, Ts]) NavTree {
+    var pagesByName Tri[String, Ts, []String]
+    for _, pg := range pages {
+        pagesByName.add(tri(x.f1, x.f2, x.f1.split("/")))
+    }
+    pagesByName.sort(comparatorFolders)
+    var st = make([]NavTree, 4)
+    var root = NavTree{ name: "", children: make([]NavTree) }
+    st.add(root)
     for i, pg := range pagesByName {
         var spl = pg.f3
-        var lenSamePrefix = min(stack.len() - 1, spl.len()) - 1
-        while lenSamePrefix > -1 && stack[lenSamePrefix + 1].name != spl[lenSamePrefix]  {
-            --lenSamePrefix
+        var lenSamePrefix = min(st.len() - 1, spl.len()) - 1
+        for lenSamePrefix > -1 && st.cont[lenSamePrefix + 1].name != spl[lenSamePrefix] {
+            lenSamePrefix--
         }
-        for j range(lenSamePrefix + 1, spl.len()) {
-            var newElem
+        for j := lenSamePrefix + 1; j < spl.len(); j++ {
+            var newElem NavTree
             if (j == spl.len() - 1) {
-                newElem = NavTree { pagesByname[i].f1, make([], 0) }
+                newElem = NavTree { name: pagesByname[i].f1, children: make([]NavTree) }
             } else {
-                newElem = NavTree { spl[j], make([], 0) }
+                newElem = NavTree { name: spl[j], children: make([]NavTree) }
             }
-            if j < stack.lastIndex {
-                stack[j + 1] = newElem
+            if j < st.cont.len() {
+                st.cont[j + 1] = newElem
             } else {
-                stack.add(newElem)
+                st.add(newElem)
             }
-            var prev = stack[j]
+            var prev = st.cont[j]
             prev.children.add(newElem)
         }
     }
@@ -315,24 +373,24 @@ func topicalOf(pages []Tu[string, Ts]) NavTree {
 }
 
 
-func temporalOf(pages []Tu[string, Ts]) NavTree {
+func temporalOf(pages []Tu[String, Ts]) NavTree {
     var pagesByDate = pages.sort(func(x y) { return x.compareTo(y) })
-    var stack = make([], 0)
-    var root = NavTree{ "", make([], 0) }
-    stack.add(root)
+    var st = createStack[NavTree]()
+    var root = NavTree { name: "", children: make([]NavTree) }
+    st.add(root)
 
     for i, pg := range pagesByDate {
         var yearName = page.f2.year.toString()
         var monthName = toName(page.f2.month)
-        var lenSamePrefix = min(stack.len() - 1, 2) - 1
-        if lenSamePrefix > -1 && yearName != stack[1].name {
+        var lenSamePrefix = min(st.len() - 1, 2) - 1
+        if lenSamePrefix > -1 && yearName != st.cont[1].name {
             lenSamePrefix = -1
         }
-        if lenSamePrefix > 0 && monthName != stack[2].name {
+        if lenSamePrefix > 0 && monthName != st.cont[2].name {
             lenSamePrefix = 0
         }
-        for j := range(lenSamePrefix + 1, 3) {
-            var name
+        for j := lenSamePrefix + 1; j < 3; j++ {
+            var name String
             if j == 2 {
                 name = page.f1
             } else if j == 1 {
@@ -341,24 +399,24 @@ func temporalOf(pages []Tu[string, Ts]) NavTree {
                 name = yearName
             }
 
-            var newElem = NavTree{ name, make([], 0) } // leaves contain the full path
-            if j < satck.lastIndex {
-                stack[j + 1] = newElem
+            var newElem = NavTree{ name: name, children: make([]NavTree) } // leaves contain the full path
+            if j < st.lastIndex {
+                st.cont[j + 1] = newElem
             } else {
-                stack.add(newElem)
+                st.add(newElem)
             }
-            var prev = stack[j]
+            var prev = st.cont[j]
             prev.children.add(newElem)
         }
     }
     return root
 }
 
-func nameOfMonth(month Month) string {
-    switch month{
-    case january: return "Jan"
-    }
-}
+//~func nameOfMonth(month Month) String {
+//~    switch month{
+//~    case january: return "Jan"
+//~    }
+//~}
 
 //}}}
 //{{{ Datasource: BlogFile
@@ -368,36 +426,42 @@ type BlogFile struct {
     ///  as well as returns the results so that the docs and core files can be updated in memory
 }
 
-interface IngestedFile {
-    IngestedFileDummy()  // empty method just to satisfy the interface
+type Ingested interface {
+    IngestedDummy()  // empty method just to satisfy the interface
 }
 
 type CreateUpdate struct {
-    fullPath string
-    content string
-    styleContent string
+    fullPath String
+    cont String
+    styleContent String
     modified Ts
-    jsModules []string
+    jsModules []String
 }
 
 type Delete struct {
-    fullPath string
+    fullPath String
 }
 
-func (*CreateUpdate) IngestedFileDummy() {}
-func (*Delete) IngestedFileDummy() {}
+func (*CreateUpdate) IngestedDummy() {}
+func (*Delete) IngestedDummy() {}
 
 
 type IngestedCore struct {
-    js string, css string, htmlNotFound IngestedFile, htmlFooter IngestedFile,
-    htmlRoot IngestedFile, htmlTermsUse IngestedFile
+    js String
+    css String
+    htmlNotFound Ingested
+    htmlFooter Ingested
+    htmlRoot Ingested
+    htmlTermsUse Ingested
 }
 
 type IngestedJsModule struct {
-    fullPath string, content String, modifTime Ts
+    fullPath String
+    cont String
+    modifTime Ts
 }
 
-func ingestFiles(rootPath string, docCache DocumentCache) Tu[[]IngestedFile, IngestedCore] {
+func ingestFiles(rootPath String, docCache DocCache) Tu[[]IngestedFile, Ingested] {
     var ingestCorePath = rootPath + ingestCoreSubfolder
     var lengthCorePrefix = ingestCorePath.length
     var ingestedCore = ingestCoreFiles(rootPath, ingestCorePath, docCache, lengthCorePrefix)
@@ -409,18 +473,24 @@ func ingestFiles(rootPath string, docCache DocumentCache) Tu[[]IngestedFile, Ing
     if err != nil {
         return nil
     }
-    var mediaFiles = make(map[string]bool, 10)
-    var scriptNames = arrFiles .filter () .map() .toList()
-    var docFiles = arrFiles .filter() .map() .toList()
+    var mediaFiles = make(map[String]bool, 10)
+    var scriptNames = make([]String)
+    var docFiles = make([]String)
+    for _, af := range arrFiles {
+        if af.isFile() && file.Name().len() > 5 && file.length < 500000 {
+            if file.Name().endsWith(".js") {
+                scriptNames.add(af.absolutePath)
+            } else if file.Name().endsWith(".html") {
+                docFiles.add(ingestDoc(af, ingestPath, mediaFiles))
+            }
+        }
+    }
 
     var mediaDir = File(rootPath + mediaSubfolder)
-    if !mediaDir.exists {
-        mediaDir.mkDirs()
-    }
-    var docDir = File(rootPath + docsSubfolder)
-    if !docDir.exists {
-        docDir.mkDirs()
-    }
+    createDirIfNotExists(mediaDir)
+    var docDir = rootPath + docsSubfolder
+    createDirIfNotExists(docDir)
+
     moveMediaFiles(mediaFiles, rootPath, lengthPrefix)
     ingestScripts(scriptNames, rootPath, docCache, false)
     moveDocs(docFiles, rootPath, ingestSubfolder, docsSubfolder)
@@ -428,13 +498,13 @@ func ingestFiles(rootPath string, docCache DocumentCache) Tu[[]IngestedFile, Ing
     return Tu{ docFiles, ingestedCore }
 }
 
-func ingestCoreFiles(rootPath string, ingestCorePath string,
-                     docCache DocumentCache, lengthPrefix int) IngestedCore {
+func ingestCoreFiles(rootPath String, ingestCorePath String,
+                     docCache DocCache, lengthPrefix int) Ingested {
     var js = moveFile(ingestCorePath, rootPath + scriptsSubfolder + globalsSubfolder, "core.js")
     var css = moveFile(ingestCorePath, rootPath + mediaSubfolder + globalsSubfolder, "core.css")
     var favicon = moveFile(ingestCorePath, rootPath + mediaSubfolder, "favicon.ico")
 
-    var mediaFiles = make(map[string]bool)
+    var mediaFiles = make(map[String]bool)
     var ingestedCoreHtml = make([]IngestedFile)
 
     var fileNotFound = File(ingestCorePath + "notFound.html")
@@ -469,8 +539,8 @@ func ingestCoreFiles(rootPath string, ingestCorePath string,
         return nil
     }
 
-    var scriptNames = make([]string)
-    for _, file := arrFiles {
+    var scriptNames = make([]String)
+    for _, file := range arrFiles {
         if file.isFile() && file.name.endsWith(".js") && file.name.len() > 5 &&
             file.length < 500000 {
             scriptNames.add(file.absolutePath)
@@ -480,18 +550,18 @@ func ingestCoreFiles(rootPath string, ingestCorePath string,
     ingestScripts(scriptNames, rootPath, docCache, true)
     moveDocs(ingestedCoreHtml, rootPath, ingestCoreSubfolder, coreSubfolder)
 
-    return IngestedCore{ js, css, htmlNotFound, htmlFooter, htmlBasePage, htmlTermsUse }
+    return Ingested{ js, css, htmlNotFound, htmlFooter, htmlBasePage, htmlTermsUse }
 }
 
-func ingestDoc(file File, ingestPath string, mediaFiles map[string]bool) *IngestedFile {
+func ingestDoc(file File, ingestPath String, mediaFiles map[String]bool) *IngestedFile {
     /// Performs ingestion of an input file: reads its contents, detects referenced
     /// media files and script modules, rewrites the links to them, and decides whether this is an
     /// update/new doc or a delete.
     var lastModified = file.lastModified()
     var indLastDot = file.path.lastIndexOf(".")
-    var fileSubpath = file.path.substring(ingestPath.len(), indLastDot) // "topic/subt/file" w/o ext
+    var fileSubpath = file.path.subString(ingestPath.len(), indLastDot) // "topic/subt/file" w/o ext
     var indLastSlash = file.path.lastIndexOf("/")
-    var fileSubfolder = file.path.substring(ingestPath.len(), indLastSlash + 1) // "topic/sub"
+    var fileSubfolder = file.path.subString(ingestPath.len(), indLastSlash + 1) // "topic/sub"
     var fileContent = file.readText()
     var content = getHtmlBodyStyle(fileContent, ingestPath, fileSubpath, mediaFiles)
     if content.len() < 10 && content.trim() == "" {
@@ -500,11 +570,13 @@ func ingestDoc(file File, ingestPath string, mediaFiles map[string]bool) *Ingest
 
     var jsModuleNames = parseJokescriptModuleNames(fileContent, fileSubfolder)
 
-    return CreateUpdate { fileSubpath, content, styleContent, lastModified, jsModuleNames)
-
+    return CreateUpdate {
+        fullPath: fileSubpath, cont: content, styleContent: styleContent,
+        modified: lastModified, jsModules: jsModuleNames,
+    }
 }
 
-func ingestScripts(scriptNames []string, rootPath string, docCache DocumentCache, isGlobal bool) {
+func ingestScripts(scriptNames []String, rootPath String, docCache DocCache, isGlobal bool) {
     /// Ingests script module files, determines their filenames, puts them into the cache folder.
     targetPath = rootPath + scriptsSubfolder
     io.CreateDirectories(targetPath)
@@ -515,17 +587,17 @@ func ingestScripts(scriptNames []string, rootPath string, docCache DocumentCache
     } else {
         prefixLength += ingestSubfolder.len()
     }
-    for _, fN := scriptNames {
+    for _, fN := range scriptNames {
         var sourceFile = File(fN)
         var scriptContent = sourceFile.readText()
-        var subfolder = fN.substring(prefixLength, fN.len() - sourceFile.name.len())
+        var subfolder = fN.subString(prefixLength, fN.len() - sourceFile.name.len())
         var rewrittenContent = rewriteScriptImports(scriptContent, subfolder)
 
-        var modId
+        var modId String
         if isGlobal {
-            modId = globalsSubfolder + fN.substring(prefixLength, fN.length - 3) // -3 for ".js"
+            modId = globalsSubfolder + fN.subString(prefixLength, fN.length - 3) // -3 for ".js"
         } else {
-            modId = subfolder + sourceFile.name.substring(0, sourceFile.name.len() - 3)
+            modId = subfolder + sourceFile.name.subString(0, sourceFile.name.len() - 3)
         }
         docCache.insertModule(modId)
         var targetFile = File(targetPath + modId + ".js")
@@ -540,27 +612,27 @@ func ingestScripts(scriptNames []string, rootPath string, docCache DocumentCache
     }
 }
 
-func moveMediaFiles(mediaFiles map[string]bool, rootPath string, lengthPrefix int,
-                    targetSubfolder string) {
+func moveMediaFiles(mediaFiles map[String]bool, rootPath String, lengthPrefix int,
+                    targetSubfolder String) {
     /// Moves media files references to which were detected to the /_m subfolder.
     var targetPath = rootPath + mediaSubfolder + targetSubfolder
-    for _, fN := mediaFiles {
+    for _, fN := range mediaFiles {
         var sourceFile = File(fN)
-        var targetFile = File(targetPath + fN.substring(lengthPrefix))
+        var targetFile = File(targetPath + fN.subString(lengthPrefix))
         if targetFile.exists() {
             targetFile.delete()
         }
-        sourceFile.copyTo(File(targetPath + fN.substring(lengthPrefix)))
+        sourceFile.copyTo(File(targetPath + fN.subString(lengthPrefix)))
         sourceFile.delete()
     }
 }
 
-func moveDocs(incomingFiles []IngestedFile, rootPath string,
-              sourceSubfolder string, targetSubfolder string) {
+func moveDocs(incomingFiles []IngestedFile, rootPath String,
+              sourceSubfolder String, targetSubfolder String) {
     /// Updates the document stockpile on disk according to the list of ingested files.
     var targetPrefix = rootPath + targetSubfolder
     var targetMediaPrefix = rootPath + mediaSubfolder
-    for _, iFile := incomingFiles {
+    for _, iFile := range incomingFiles {
         if iFile.(type) == CreateUpdate {
             var nameId = iFlie.fullPath.replace(" ", "")
             var sourceHtml = File(rootPath + sourceSubfolder + iFile.fullPath + ".html")
@@ -579,7 +651,7 @@ func moveDocs(incomingFiles []IngestedFile, rootPath string,
             if iFile.jsModules.len() > 0 {
                 var depsTarget = File(targetPrefix + nameId + ".deps")
                 os.Remove(depsTarget)
-                depsTarget.writeText(iFile.jsModules.joinToString("\n")
+                depsTarget.writeText(iFile.jsModules.joinToString("\n"))
             }
             os.Remove(sourceHtml)
         } else if iFile.(type) == IsDelete {
@@ -592,68 +664,67 @@ func moveDocs(incomingFiles []IngestedFile, rootPath string,
     }
 }
 
-func readCachedDocs(rootPath string, cache DocumentCache) {
+func readCachedDocs(rootPath String, cache DocCache) {
     var docsDirN = rootPath + docsSubfolder
     var docsDir = File(docsDirN)
     var prefixLength = docsDirN.len()
-    var fileList
-    for _, file := io.ReadDir(docsDir) {
-        if file.isFile && file.name.endsWith(".html") && file.name.len() > 5
-              && file.len() < 2000000 {
+    var fileList = make([]FileInfo)
+    files, err := io.ReadDir(docsDir)
+    if err != nil {
+        log.fatal(err)
+        return
+    }
+    for _, file := range files {
+        if (file.isFile && file.name.endsWith(".html") && file.name.len() > 5 &&
+              file.len() < 2000000) {
             fileList.add(file)
         }
     }
-    for _, fi := fileList {
-        var address = fi.path.substring(prefixLength, fi.path.length - 5) // -5 for the ".html"
-        var depsFile = File(docsDir + address + ".deps")
-        var deps
-        if depsFile.exists() {
-            deps = depsFile.readText().split("\n")
+    for _, fi := range fileList {
+        var address = fi.path.subString(prefixLength, fi.path.length - 5) // -5 for the ".html"
+        var depsFile = readFile(docsDir + address + ".deps")
+        var deps []String
+        if depsFile != "" {
+            deps = depsFile.split("\n")
         } else {
-            deps = make([]string)
+            deps = make([]String)
         }
         var hasCSS = File(rootPath + mediaSubfolder + address + ".css").exists()
-        var doc = Document { fi.readText(), deps, hasCss, address, fi.lastModified, -1, false }
+        var doc = createDocument(fi.readText(), deps, hasCss, address, fi.lastModified)
         cache.addDocument(address, doc)
     }
 }
 
-func readCachedCore(rootPath string, cache DocumentCache) {
+func (t DocCache) readCachedCore(rootPath String) {
     var ingestDirN = rootPath + coreSubfolder
 
     var fileJs = readFile(ingestDirN + "core.js")
-    if fileJs != "" {
-        cache.coreJS = fileJs
-    }
+    if fileJs != "" { cache.coreJS = fileJs }
 
-    var fileHtmlRoot = File(ingestDirN + "core.html")
-    if fileHtmlRoot.exists() {
-        cache.rootPage = Document(fileHtmlRoot.readText(), make([]),
-                                  false, "", Time.MIN, -1, false)
+    var fileHtmlRoot = readFile(ingestDirN + "core.html")
+    if fileHtmlRoot != "" {
+        cache.rootPage = createDocument(fileHtmlRoot.readText(), make([]String), false, "", Time.MIN)
     }
-    var fileCss = File(ingestDirN + "core.css")
-    if fileCss.exists() {
-        cache.coreCSS = fileCss.readText()
-    }
+    var fileCss = readText(ingestDirN + "core.css")
+    if fileCss != "" { cache.coreCSS = fileCss }
 }
 
-func readCachedScripts(rootPath string, docCache DocumentCache) {
+func readCachedScripts(rootPath String, docCache DocCache) {
     var ingestDirN = rootPath + scriptsSubfolder
     var ingestDir = File(ingestDirN)
     var prefixLength = ingestDirN.len()
-    var fileList
-    for _, fi := io.ReadDir(ingestDirN) {
-        if fi.isFile && fi.name.endsWith(".js") && fi.name.len() > 5 && fi.len() < 500000 {
-            fileList.add(fi)
-        }
+    if fileList, err := io.ReadDir(ingestDirN); err {
+        log.Fatal(err)
     }
-    for _, fi := fileList {
-        var shortFileName = fi.path.substring(prefixLength, fi.path.len() - 3) // -3 for the ".js"
-        docCache.insertModule(shortFileName)
+    for _, fi := range fileList {
+        if fi.isFile && fi.name.endsWith(".js") && fi.name.len() > 5 && fi.len() < 500000 {
+            var shortFileName = fi.path.subString(prefixLength, fi.path.len() - 3) // -3 for the ".js"
+            docCache.insertModule(shortFileName)
+        }
     }
 }
 
-func moveFile(sourcePath string, targetPath string, fNShort string) {
+func moveFile(sourcePath String, targetPath String, fNShort String) {
     result = readFile(sourcePath + fNShort)
     (targetPath + fNShort).deleteFile()
     if fTarget.exists() {
@@ -668,31 +739,31 @@ func moveFile(sourcePath string, targetPath string, fNShort string) {
 //}}}
 //{{{ Rewriter
 
-func rewriteLinks(content string, ingestPath string, fileSubpath string,
-                  mediaFiles map[string]bool) {
+func rewriteLinks(content String, ingestPath String, fileSubpath String,
+                  mediaFiles map[String]bool) {
     /// Rewrites links in a document from to point to new position inside /_m.
     /// Returns the document contents with rewritten links.
     var result = StringBuilder(content.len() + 100)
     var prevInd = 0
-    var currInd
+    var currInd int
     var indLastSlash = fileSubpath.lastIndexOf("/")
-    var fileSubfolder
+    var fileSubfolder String
     if indLastSlash < 1 {
-        fileSubpath = ""
+        fileSubfolder = ""
     } else {
-        fileSubfolder = fileSubpath.substring(0, indLastSlash).pathize()
+        fileSubfolder = fileSubpath.subString(0, indLastSlash).pathize()
     }
-    while true {
+    for {
         currInd = content.indexOf("src=\"", prevInd)
         if currInd == -1 {
-            result.append(content.substring(prevInd))
+            result.append(content.subString(prevInd))
             return result.toString()
         }
-        result.append(content.substring(prevInd, currInd))
+        result.append(content.subString(prevInd, currInd))
         result.append("src=\"")
         var indClosingQuote = content.indexOf("\"", currInd + 5)
         if indClosingQuote > -1 {
-            var link = content.substring(currInd + 5, indClosingQuote) // cutting original `src="`
+            var link = content.subString(currInd + 5, indClosingQuote) // cutting original `src="`
             var sourcePath = (ingestPath + fileSubfolder).pathize() + link
             var targetSubpath = "/" + appSubfolder + mediaSubfolder + fileSubfolder + link
             if File(sourcePath).exists() {
@@ -705,8 +776,8 @@ func rewriteLinks(content string, ingestPath string, fileSubpath string,
     }
 }
 
-func parseJokescriptModuleNames(fileContent string, fileSubfolder string) []string {
-    var result = make([], 0)
+func parseJokescriptModuleNames(fileContent String, fileSubfolder String) []String {
+    var result = make([]String)
     var headStart = fileContent.indexOf("<head>", 0, true)
     if headStart < 0 {
         return result
@@ -717,9 +788,9 @@ func parseJokescriptModuleNames(fileContent string, fileSubfolder string) []stri
         return result
     }
 
-    var headString = fileContent.substring(headStart + 6, headEnd) // +6 for `<head>`
+    var headString = fileContent.subString(headStart + 6, headEnd) // +6 for `<head>`
     var i = 0
-    while true {
+    for {
         i = headString.indexOf("<script", i, true)
         if i < 0 {
             break
@@ -727,7 +798,7 @@ func parseJokescriptModuleNames(fileContent string, fileSubfolder string) []stri
         i += 7 // +7 for the `<script`
 
         var j = headString.indexOf(">", i, true)
-        var spl = headString.substring(i, j).split(" ")
+        var spl = headString.subString(i, j).split(" ")
 
         var srcString = spl.firstOrNull(func(a) { a.startsWith("src=\"") } )
         if srcString == nil {
@@ -738,9 +809,9 @@ func parseJokescriptModuleNames(fileContent string, fileSubfolder string) []stri
             continue
         }
 
-        var rawModuleName = srcString.substring(5, indJs)
-        if rawModuleName.startsWith("./")) { // adjacent file
-            result.add(fileSubfolder = rawModuleName.substring(2))
+        var rawModuleName = srcString.subString(5, indJs)
+        if rawModuleName.startsWith("./") { // adjacent file
+            result.add(fileSubfolder + rawModuleName.subStringToEnd(2))
         } else { // global script module
             result.add(globalsSubfolder + rawModuleName)
         }
@@ -753,8 +824,8 @@ func rewriteScriptImports() {
     /// including global imports
     var spl = script.split("\n")
     var i = 0
-    while i < spl.len() && spl[i].startsWith("import") {
-        ++i
+    for i < spl.len() && spl[i].startsWith("import") {
+        i++
     }
     var scriptPrefix = "/" + appSubfolder + scriptsSubfolder
     for j := range i {
@@ -762,13 +833,13 @@ func rewriteScriptImports() {
         if indFrom < 0 {
             return ""
         }
-        var tail = spl[j].substring(indFrom + 1)
-        if tail.startsWith("global/")) {
-            spl[j] = spl[j].substring(0, indFrom + 1) + scriptPrefix +
-                globalsSubfolder + spl[j].substring(indFrom + 8) // +8 for `"global/`
+        var tail = spl[j].subString(indFrom + 1)
+        if tail.startsWith("global/") {
+            spl[j] = spl[j].subString(0, indFrom + 1) + scriptPrefix +
+                globalsSubfolder + spl[j].subString(indFrom + 8) // +8 for `"global/`
         } else if tail.startsWith("./") {
-            spl[j] = spl[j].substring(0, indFrom + 1) + scriptPrefix +
-                subfolder + spl[j].substring(indFrom + 3) // +3 for `"./`
+            spl[j] = spl[j].subString(0, indFrom + 1) + scriptPrefix +
+                subfolder + spl[j].subString(indFrom + 3) // +3 for `"./`
         } else {
             return ""
         }
@@ -784,13 +855,13 @@ func getHtmlBodyStyle() {
     if indStart < 0 || indEnd < 0 || (indEnd - indStart) < 7 {
         return Tu(html, "")
     }
-    var bodyRewritten = rewriteLinks(html.substring(indStart + 6, indEnd), ingestPath,
+    var bodyRewritten = rewriteLinks(html.subString(indStart + 6, indEnd), ingestPath,
         fileSubpath, mediaFiles)
     var indStyleStart = html.indexOf("<style>")
     var indStyleEnd = html.indexOf("</style>")
-    var style
+    var style = ""
     if indStyleStart > -1 && indStyleEnd > -1 && (indStyleEnd - indStyleStart) >= 8 {
-        style = html.substring(indStyleStart + 7, indStyleEnd).trim()
+        style = html.subString(indStyleStart + 7, indStyleEnd).trim()
     } else {
         style = ""
     }
@@ -805,15 +876,31 @@ type Tu[T any, U any] struct {
     f2 U
 }
 
-func createSet(es ...string) map[string]bool {
-    var result = map[string]bool{}
+func tu[T any, U any](f1 T, f2 U) Tu[T, U] {
+    return Tu { f1: f1, f2: f2 }
+}
+
+type Tri[T any, U any, V any] struct {
+    f1 T
+    f2 U
+    f3 V
+}
+
+func tri[T any, U any, V any](a T, b U, c V) {
+    return Tri { f1: a, f2: b, f3: c }
+}
+
+func createSet(es ...String) map[String]bool {
+    var result = map[String]bool{}
     for _, v := range es {
         result[v] = true
     }
     return result
 }
 
-func (t []T) indexOf[T any](needle T) int {
+type Slice[T any] []T
+
+func (t Slice[T]) indexOf(needle T) int {
     /// IndexOf returns the first index of needle in haystack
     for i, v := range haystack {
         if v == needle {
@@ -824,7 +911,7 @@ func (t []T) indexOf[T any](needle T) int {
 }
 
 
-func (t string) pathize() string {
+func (t String) pathize() String {
     if t.endsWith("/") {
         return t
     } else {
@@ -832,24 +919,45 @@ func (t string) pathize() string {
     }
 }
 
+func (t []T) add(elt T) []T {
+    return append(t, elt)
+}
 
-func (t string) len() int {
+type String string
+
+func (t String) len() int {
     return len(t)
 }
 
-func (t string) toLower() int {
+func (t map[T]U) len() int {
+    return len(t)
+}
+
+func (t String) toLower() String {
     return strings.ToLower(t)
 }
 
-func (t string) endsWith(s string) int {
+func (t String) endsWith(s String) int {
     return strings.HasSuffix(t, s)
 }
 
-func (t string) split(s string) int {
+func (t String) replace(a String, replaceWith String) String {
+    return strings.Replace(t, a, replaceWith, -1)
+}
+
+func (t String) subString(start int, end int) String {
+    return t[start:end]
+}
+
+func (t String) subStringToEnd(start int) String {
+    return t[start:]
+}
+
+func (t String) split(s String) int {
     return strings.Split(t, s)
 }
 
-func printAllFiles(dirN string) {
+func printAllFiles(dirN String) {
     files, err := os.ReadDir(dirN)
     if err != nil {
         return
@@ -861,17 +969,54 @@ func printAllFiles(dirN string) {
 }
 
 
-func readFile(fN string) string {
+func readFile(fN String) String {
     fi, err := os.ReadFile(fN)
     if err == nil {
-        return string(fi)
+        return String(fi)
     } else {
         return ""
     }
 }
 
+func createDirIfNotExists(dirN String) {
+    if _, err := os.Stat(dirN); os.IsNotExist(err) {
+        if err := os.MkdirAll(dirN, os.ModePerm); err != nil {
+            log.Fatal(err)
+        }
+    }
+}
+
+//{{{ Stack
+
+type Stack[T any] struct {
+    cont []T
+}
+
+func createStack[T any]() Stack[T] {
+    var cont = make([]T)
+    return Stack { cont: cont }
+}
+
+func (t Stack[T]) hasItems() bool {
+    return len(t.cont) > 0
+}
+
+func (t Stack[T]) push(newV T) {
+    t.cont = append(t.cont, newV)
+}
 
 
+func (t Stack[T]) pop() T {
+    var result = t.cont[-1]
+    t.cont = t.cont[:len(t.cont) - 1]
+    return result
+}
+
+func (t []T) peek() bool {
+    return len(t.cont) > 0
+}
+
+//}}}
 //}}}
 //{{{ Templates
 
