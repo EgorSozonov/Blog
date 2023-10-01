@@ -6,12 +6,6 @@ endif
 
 .PHONY: all clean help
 
-CC=go
-CONFIG=-g3
-WARN=-Wpedantic -Wreturn-type -Wunused-variable -Wshadow -Wfatal-errors \
--Werror=implicit-function-declaration -Werror=incompatible-pointer-types \
--Werror=int-conversion -fstrict-flex-arrays=3 \
--Wsuggest-attribute=pure -Wsuggest-attribute=const -Wsuggest-attribute=malloc
 DEPFLAGS=
 LIBS=-lm
 BIN=blog
@@ -29,14 +23,11 @@ all: _bin/$(BIN) ## Build the whole project
 / @echo "              BUILD SUCCESS              "
 / @echo "========================================="
 
-_bin/cache: | _bin
-/ mkdir -p _bin/cache
-
 build: | _bin ## Build the project
-/ dotnet build
+/ CARGO_TARGET_DIR=_bin cargo build
 
 run: 
-/ go run main.go
+/ cargo run
 
 _bin:
 / mkdir _bin
