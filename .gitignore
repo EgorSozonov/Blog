@@ -8,6 +8,4 @@ obj/*
 tags
 
 
-# Added by cargo
-Cargo.lock
-/target
+.stack-work/*

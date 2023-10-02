@@ -7,15 +7,11 @@ endif
 .PHONY: all clean help
 
 DEPFLAGS=
-LIBS=-lm
 BIN=blog
 
 CFLAGS = $(CONFIG) $(WARN) $(OPT) $(DEPFLAGS) $(LIBS)
 
-SOURCE=$(wildcard src/*.go)
-
-OBJ=$(addprefix _bin/cache/, $(notdir $(SOURCE:.c=.o)))
-
+SOURCE=$(wildcard src/*.hs)
 
 
 all: _bin/$(BIN) ## Build the whole project
@@ -27,7 +23,7 @@ build: | _bin ## Build the project
 / CARGO_TARGET_DIR=_bin cargo build
 
 run: 
-/ cargo run
+/ cabal run
 
 _bin:
 / mkdir _bin
