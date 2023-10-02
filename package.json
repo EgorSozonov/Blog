@@ -2,7 +2,7 @@
     "name": "blog",
     "version": "1.0.0",
     "description": "Personal blog",
-    "main": "src/main.js",
+    "main": "_bin/main.js",
     "directories": {
         "doc": "docs",
         "test": "test"
