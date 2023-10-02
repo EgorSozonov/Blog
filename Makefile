@@ -11,19 +11,21 @@ BIN=blog
 
 CFLAGS = $(CONFIG) $(WARN) $(OPT) $(DEPFLAGS) $(LIBS)
 
-SOURCE=$(wildcard src/*.hs)
-
+SOURCE=$(wildcard src/*.ts)
 
 all: _bin/$(BIN) ## Build the whole project
 / @echo "========================================="
 / @echo "              BUILD SUCCESS              "
 / @echo "========================================="
 
+install:
+/ npm install --save-dev typescript@$(TYPESCRIPT_VERSION)
+
 build: | _bin ## Build the project
-/ CARGO_TARGET_DIR=_bin cargo build
+/ tsc
 
 run: 
-/ cabal run
+/ node .
 
 _bin:
 / mkdir _bin
