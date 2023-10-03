@@ -495,8 +495,88 @@ getHtmlBodyStyle(html: string, ingestPath: string, fileSubpath: string, mediaFil
 //}}}
 //{{{ File data source
 
-class BlogFile {
+type IngestedCore = {
+    js: string;
+    css: string;
+    htmlNotFound: Ingested?;
+    htmlFooter:  Ingested?;
+    htmlRoot:  Ingested?;
+    htmlTermsUse:  Ingested?;
+}
 
+type IngestedJsModule = {
+    fullPath: string;
+    cont: string;
+    modified: Date;
+}
+
+class BlogFile {
+    /// Ingests all input files (core, scripts and docs), moves them to the internal file cache,
+    /// and returns the results so that the docs and core files can be updated in memory
+    ingestFiles(rootPath: string, docCache: DocCache): [Ingested[], IngestedCore] {
+        const ingestCorePath = rootPath + ingestCoreSubfolder
+        const lengthCorePrefix = ingestCorePath.length
+        const ingestedCore = ingestCoreFiles(rootPath, ingestCorePath, docCache, lengthCorePrefix)
+
+        const ingestPath = rootPath + ingestSubfolder
+        const lengthPrefix = ingestPath.length
+        const ingestDir = File(ingestPath)
+        const arrFiles = fs.readdirSync(ingestDir)
+        const mediaFiles = new Set<string>(10)
+
+        const scriptNames = arrFiles
+            .filter(file -> file.isFile && file.name.endsWith(".js") && file.name.length > 5
+                    && file.length() < 2000000)
+            .map (ingestDoc(it, ingestPath, mediaFiles));
+
+
+        const mediaDir = File(rootPath + mediaSubfolder)
+        if (!mediaDir.exists()) { mediaDir.mkdirs() }
+        val docDir = File(rootPath + docsSubfolder)
+        if (!docDir.exists()) {docDir.mkdirs()}
+
+        moveMediaFiles(mediaFiles, rootPath, lengthPrefix)
+        ingestScripts(scriptNames, rootPath, docCache, false)
+        moveDocs(docFiles, rootPath, ingestSubfolder, docsSubfolder)
+
+        return [docFiles, ingestedCore]
+    }
+
+    ingestCoreFiles()  {
+
+    }
+
+    ingestDoc() {
+
+    }
+
+    ingestScripts() {
+
+    }
+
+    moveMediaFiles() {
+
+    }
+
+    moveDocs() {
+
+    }
+
+    readCachedDocs() {
+
+    }
+
+    readCachedCore() {
+
+    }
+
+    readCachedScripts() {
+
+    }
+
+    moveFile()  {
+
+    }
 }
 
 //}}}
