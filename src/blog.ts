@@ -198,8 +198,128 @@ class NavTree {
         const st = [NavTree, number][]
         st.push([this, 0])
         while(st.length > 0) {
+            const top = stack.last()
+            if (top[1] < top[0].children.length) {
+                const next = top[0].children[top[1]]
+                if (next.children.length > ) {
+                    st.push([next, 0])
+                } else {
+                    if (next.name === subAddress) {
+                        const result = []
+                        for (a of st) {
+                            result.push(a[1])
+                        } 
+                        return result;
+                    }
+                    ++top[1]
+                }
+            } else {
+                st.pop()
+                if (st.length > 0) {
+                    const prevTop = stack.last()
+                    ++prevTop[1]
+                }
+            }
+        }
+        return [] 
+    }
+    
+    toJson(): string  {
+        const st: [NavTree, number][] = []
+        if (this.children.length === 0) {
+            return ""
+        }
+        const result = ""
+        st.push([this, 0])
+        while (st.length > 0) {
+            const top = stack.last()
+            if (top[1] < top[0].children.length) {
+                const next = top[0].children[top[1]]
+                if (next.children.length > 0) {
+                    result += `["`;
+                    result += next.name;
+                    result += `", [`;
+                    st.push([next, 0])
+                } else {
+                    result += `["`;
+                    result += next.name;
+                    if (top[1] === top[0].children.length - 1) {
+                        result += `", [] ] `;
+                    } else {
+                        result += `", [] ], `;
+                    }
+                }
+            } else {
+                st.pop();
+                if(st.length > 0) {
+                    const parent = st.peek();
+                    if (parent[1] < parent[0].children.length) {
+                        result += `]], `;
+                    } else {
+                        result += `]] `;
+                    }
+                }
+            }
+            top[1] += 1;
+        }
+        return result; 
+    }
+    
+    static of(docCache: DocCache): [NavTree, NavTree] {
+        const arrNavigation = docCache.toPageArray()
+        const topical = topicalOf(arrNavigation)
+        const temporal = temporalOf(arrNavigation)
+        return [topical, temporal]
+    }
+    
+    comparatorFolders(x: Folder, y: Folder): number {
+        const lenX = x.subfolders.length
+        const lenY = y.subfolders.length
+        const folderLengthCommon = min(lenX, lenY)
+        for (let i = 0; i < folderLengthCommon; i++) {
+            const cmp = x.subfolders[i].compareTo(y.subfolders[i]);
+            if (cmp !== 0) {
+                return cmp;
+            }
+        }
+        if(lenX != lenY) {
+            return lenY.compareTo(lenX)
+        } else {
+            return x.subfolders.last().compareTo(y.subfolders.last())
         }
     }
+    
+    topicalOf(pages: [string, Date][]): NavTree {
+        const pagesByName
+    }
+    
+    temporalOf(pages: [string, Date][]): NavTree {
+        
+    }
+    
+    
+    protected fun toName(month: Month): String {
+        return when (month) {
+            Month.JANUARY -> "Jan"
+            Month.FEBRUARY -> "Feb"
+            Month.MARCH -> "Mar"
+            Month.APRIL -> "Apr"
+            Month.MAY -> "May"
+            Month.JUNE -> "Jun"
+            Month.JULY -> "Jul"
+            Month.AUGUST -> "Aug"
+            Month.SEPTEMBER -> "Sep"
+            Month.OCTOBER -> "Oct"
+            Month.NOVEMBER -> "Nov"
+            Month.DECEMBER -> "Dec"
+        }
+    }
+}
+
+type Folder = {
+    path: string;
+    modified: Date;
+    subfolders: string[];
 }
 
 //}}}
@@ -221,4 +341,11 @@ app.listen( port, () => {
 
 //}}}
 //{{{ Utils
+
+type Triple<T, U, V> = {
+    f1: T;
+    f2: U;
+    f3: V;
+}
+
 //}}}
