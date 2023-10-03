@@ -1,5 +1,10 @@
-import { Request, Response } from "express"
+//{{{ Imports
 
+import { Request, Response } from "express"
+import "./extensions"
+const fs = require("fs")
+
+//}}}
 //{{{ Constants
 
 const appSubfolder = "blog/"
@@ -208,7 +213,7 @@ class NavTree {
                         const result = []
                         for (a of st) {
                             result.push(a[1])
-                        } 
+                        }
                         return result;
                     }
                     ++top[1]
@@ -221,9 +226,9 @@ class NavTree {
                 }
             }
         }
-        return [] 
+        return []
     }
-    
+
     toJson(): string  {
         const st: [NavTree, number][] = []
         if (this.children.length === 0) {
@@ -262,16 +267,16 @@ class NavTree {
             }
             top[1] += 1;
         }
-        return result; 
+        return result;
     }
-    
+
     static of(docCache: DocCache): [NavTree, NavTree] {
         const arrNavigation = docCache.toPageArray()
         const topical = topicalOf(arrNavigation)
         const temporal = temporalOf(arrNavigation)
         return [topical, temporal]
     }
-    
+
     comparatorFolders(x: Folder, y: Folder): number {
         const lenX = x.subfolders.length
         const lenY = y.subfolders.length
@@ -288,16 +293,62 @@ class NavTree {
             return x.subfolders.last().compareTo(y.subfolders.last())
         }
     }
-    
+
     topicalOf(pages: [string, Date][]): NavTree {
-        const pagesByName
+        const pagesByName = pages.map(x => new Folder(x[0], x[1], x[0].split("/")))
+            .sortedWith(comparatorFolders);
+        const st = []
+        const root = new NavTree("", [])
+        st.push(root)
+
+        for (let pag of pagesByName) {
+            const spl = pag.subfolders;
+            let lenSamePrefix = min(st.length - 1, spl.length) - 1
+            while (lenSamePrefix > -1 && st[lenSamePrefix + 1].name !== spl[lenSamePrefix) {
+                --lenSamePrefix;
+            }
+            for (let j = lenSamePrefix + 1; j < spl.length; j++) {
+                const newElem = ((j === spl.length - 1) ?
+                        new NavTree(pag.path, []) : new NavTree(spl[j], []));
+                if (j < stack.lastIndex) {
+                    st[j + 1] = newElem
+                } else {
+                    st.push(newElem)
+                }
+                const prev = st[j]
+                prev.children.push(newElem)
+            }
+        }
+        return root;
     }
-    
+
     temporalOf(pages: [string, Date][]): NavTree {
-        
+        const pagesByDate = pages.sortedWith(compareBy it[1]);
+        const st = []
+        const root = new NavTree("", [])
+        for (let pag of pagesByDate)  {
+            const yearName = pag[1].year.toString()
+            const monthName = nameOf(page.second.month)
+
+            let lenSamePrefix = min(st.length - 1, 2) - 1
+            if (lenSamePrefix > -1 && yearName !== st[1].name) lenSamePrefix = -1;
+            if (lenSamePrefix > 0 && monthName !== st[2].name) lenSamePrefix = 0;
+            for (let j = lenSamePrefix + 1; j < 3; j++) {
+                const name = (j == 2 ? pg[0] : (j == 1 ? monthName : yearName));
+            }
+            const newElem = new NavTree(name, []) // the leaves contain the full path
+            if (j < st.lastIndex) {
+                st[j + 1] = newElem;
+            } else {
+                st.push(newElem);
+            }
+            const prev = st[j];
+            prev.children.push(newElem);
+        }
+        return root;
     }
-    
-    
+
+
     protected fun toName(month: Month): String {
         return when (month) {
             Month.JANUARY -> "Jan"
@@ -320,6 +371,132 @@ type Folder = {
     path: string;
     modified: Date;
     subfolders: string[];
+}
+
+//}}}
+//{{{ Rewriter
+
+function rewriteLinks(cont: string, ingestPath: string, fileSubpath: string): string {
+    /// Rewrites links in a document from to point to new position inside /_m.
+    /// Returns the document contents with rewritten links.
+    const result = ""
+    let prevInd = 0
+    let currInd = 0
+    const indLastSlash = fileSubpath.lastIndexOf("/")
+    const fileSubfolder = (indLastSlash < 1)
+        ? "" : fileSubpath.substring(0, indLastSlash).pathize();
+    while (true)  {
+        currInd = content.indexOf(`src="`, prevInd)
+        if (currInd === -1) {
+            result += content.substring(prevInd)
+            return result
+        }
+
+        result += content.substring(prevInd, currInd)
+        result += `src="`
+        const indClosingQuote = cont.indexOf(`"`, currInd + 5)
+        if (indClosingQuote > -1) {
+            const link = cont.substring(currInd + 5, indClosingQuote) // cutting off the initial src="
+            const sourcePath = (ingestPath + fileSubfolder).pathize() + link
+            const targetSubpath = "/" + appSubfolder + mediaSubfolder + fileSubfolder + link
+            if (fs.existsSync()) mediaFiles.push(sourcePath);
+            result += targetSubpath
+            currInd = indClosingQuote
+        }
+        prevInd = currInd
+    }
+    return result;
+}
+
+function parseJsModuleNames(fileContent: string, fileSubfolder: string): string[] {
+    const result = []
+    const headStart = fileContent.indexOf("<head>", 0, true)
+    if (headStart < 0) {
+        return result
+    }
+
+    const headEnd = fileContent.indexOf("</head>", headStart, true)
+    if (headEnd < 0) {
+        return result
+    }
+
+    let i = 0
+    while (true) {
+        i = headString.index("<script", i, true)
+        if (i < 0) {
+            break
+        }
+        i += 7 // +7 for the "<script"
+
+        const j = headString.indexOf(">", i, true)
+        const spl = headString.substring(i, j).split(" ")
+
+        const srcString = spl.firstOrNull { it.startsWith(`src="`) } ?: continue
+
+        const indJs = srcString.indexOf(".js", 5, true) // 5 for `src="`
+        if (indJs < 0) {
+            continue
+        }
+
+        const rawModuleName = srcString.substring(5, indJs)
+        if (rawModuleName.startsWith("./")) {
+            result.push(fileSubfolder + rawModuleName.substring(2))
+        } else {
+            result.push(globalsSubfolder + rawModuleName)
+        }
+    }
+    return result
+}
+
+function rewriteScriptImports(script: string, subfolder: string): string {
+    /// Rewrites the JokeScript imports to correctly reference files on the server, including
+    /// global imports
+    const spl = script.split("\n")
+    let i = 0
+    while (i < spl.size && spl[i].startsWith("import")) {
+        i++;
+    }
+    for (let j = 0; j < i; j++) {
+        const indFrom = spl[j].indexOf(`"`);
+        if (indFrom < 0) {
+            return ""
+        }
+        let tail = spl[j].substring(indFrom + 1)
+        if (tail.startsWith(`global/`)) {
+            spl[j] = spl[j].substring(0, indFrom + 1) + scriptPrefix + globalsSubfolder +
+                    spl[j].substring(indFrom + 8) // +8 for the `"global/`
+        } else if (tail.startsWidth("./")) {
+            spl[j] = spl[j].substring(0, indFrom + 1) + scriptPrefix + subfolder +
+                    spl[j].substring(indFrom + 3) // +3 for `"./`
+        } else  {
+            return ""
+        }
+    }
+    return spl.joinToString("\n")
+}
+
+
+getHtmlBodyStyle(html: string, ingestPath: string, fileSubpath: string, mediaFiles: Set<String>)
+      : [string, string] {
+    const indStart = html.indexOf(`<body>`)
+    const indEnd = html.lastIndexOf(`</body>`)
+    if (indStart < 0 || indEnd < 0 || (indEnd - indStart) < 7) {
+        return [html, ""]
+    }
+    const bodyRewritten = rewriteLinks(html.substring(indStart + 6, indEnd), ingestPath,
+                                       fileSubpath, mediaFiles)
+    const indStyleStart = html.indexOf(`<style>`)
+    const indStyleEnd = html.indexOf(`</style>`)
+    const style = (indStyleStart > -1 && indStyleEnd > -1 && (indStyleEnd - indStyleStart) >= 8)
+        ? (html.substring(indStyleStart + 7, indStyleEnd).trim()) : "";
+    return [bodyRewritten, style]
+}
+
+//}}}
+//{{{ File data source
+
+class BlogFile {
+
 }
 
 //}}}
