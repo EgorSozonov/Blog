@@ -532,7 +532,7 @@ class BlogFile {
 
         const mediaDir = File(rootPath + mediaSubfolder)
         if (!mediaDir.exists()) { mediaDir.mkdirs() }
-        val docDir = File(rootPath + docsSubfolder)
+        const docDir = File(rootPath + docsSubfolder)
         if (!docDir.exists()) {docDir.mkdirs()}
 
         moveMediaFiles(mediaFiles, rootPath, lengthPrefix)
@@ -542,42 +542,319 @@ class BlogFile {
         return [docFiles, ingestedCore]
     }
 
-    ingestCoreFiles()  {
+    ingestCoreFiles(ingestCorePath: string, docCache: DocCache, lenPrefix: number): IngestedCore {
+        const js = moveFile(ingestCorePath, rootPath + scriptsSubfolder + globalsSubfolder, "core.js")
+        const css = moveFile(ingestCorePath, rootPath + mediaSubfolder + globalsSubfolder, "core.css")
+        const favicon = moveFile(ingestCorePath, rootPath + mediaSubfolder, "favicon.ico")
+
+        const mediaFiles = new Set<string>();
+        const ingestedCoreHtml = []
+
+        const htmlNotFound = ingestDoc(ingestCorePath + "notFound.html", mediaFiles)
+        const htmlFooter = ingestDoc(ingestCorePath + "footer.html", mediaFiles)
+        const htmlBasePage = ingestDoc(ingestCorePath + "core.html", mediaFiles)
+        const htmlTermsUse = ingestDoc(ingestCorePath + "termsOfUse.html", mediaFiles)
+
+        if (htmlNotFound !== "") {
+            ingestedCoreHtml.add(htmlNotFound)
+        }
+        if (htmlFooter !== "") {
+            ingestedCoreHtml.add(htmlFooter)
+        }
+        if (htmlBasePage !== "") {
+            ingestedCoreHtml.add(htmlBasePage)
+        }
+        if (htmlTerms !== "") {
+            ingestedCoreHtml.add(htmlTerms)
+        }
+        const arrFiles = walk(ingestCorePath)
+
+        const scriptNames = arrFiles.filter(file => file.isFIle && file.name.endsWith(".js")
+                                            && file.name.length > 5 && file.length() < 500000)
+                                            .map(a => a.absolutePath);
+        moveMediaFiles(mediaFiles, rootPath, lenPrefix)
+        ingestScripts(scriptNames, rootPath, docCache, true)
+        moveDocs(ingestedCoreHtml, rootPath, ingestCoreSubfolder, coreSubfolder)
+
+        return new IngestedCore(js, css, htmlNotFound, htmlFooter, htmlBasePage, htmlTermsUse)
+    }
+
+    ingestDoc(file: File, ingestPath: string, mediaFiles: Set<string>): Ingested {
+        /// Performs ingestion of an input file: reads its contents, detects referenced
+        /// media files and script modules, rewrites the links to them, and decides whether this is an
+        /// update/new doc or a delete.
+        const lastModified = file.lastModified()
+        const indLastPeriod = file.path.lastIndexOf(".");
+        const fileSubpath = file.path.substring(ingestPath.length, indLastPeriod) // "topic/subt/file"
+        const indLastSlash = file.path.lastIndexOf("/")
+        const fileSubfolder = file.path.substring(ingestPath.length, indLastSlash = 1) // "topic/subt/"
+        const fileContent = file.readText()
+        const [content, styleContent] = getHtmlBodyStyle(
+                fileContent, ingestPath, fileSubpath, mediaFiles);
+        if (content.length < 5 && content.trim() == "") {
+            return Delete{fullPath: fileSubpath};
+        }
+        const jsModuleNames = parseJsModuleNames(fileContent, fileSubfolder)
+
+        return new CreateUpdateDoc(fileSubpath, content, styleContent, dateLastModified, jsModuleNames)
+    }
+
+    ingestScripts(scriptnames: string[], docCache: DocCache, isGlobal: boolean) {
+        /// Ingests script module files, determines their names, and puts them into the cache folder.
+        const targetPath = rootPath + scriptsSubfolder
+
+        Files.createDirectories(Path.of(targetPath))
+
+        const prefixLength = rootPath.length +
+            (isGlobal ? ingestCoreSubfolder.length : ingestSubfolder.length);
+        for (fN of scriptNames) {
+            const scriptContent = sourceFile.readText()
+            const subfolder = fN.substring(prefixLength, fN.length - sourceFile.name.length)
+            const rewrittenContent = Rewriter.rewriteScriptImports(scriptContent, subfolder)
+
+            const modId = (isGlobal) ?
+                (globalsSubfolder + fN.substring(prefixLength, fN.length - 3)) // -3 for ".js"
+                : (subfolder + sourceFile.name.substring(0, sourceFile.name.length - 3));
+
+            docCache.insertModule(modId)
+            const targetFile = File(targetPath + modId + ".js")
+
+            if (subfolder.length > 0) {
+                Files.createDirectories(Path.of(targetPath + subfolder))
+            } else {
+                Files.createDirectories(Path.of(targetPath + globalsSubfolder))
+            }
+
+            targetFile.writeText(rewrittenContent)
+            sourceFile.delete()
+        }
+    }
+
+    moveMediaFiles(mediaFiles: Set<string>, lenPrefix: number, targetSubfolder: string) {
+        /// Moves media files references to which were detected to the /_m subfolder.
+        const targetPath = rootPath + mediaSubfolder + targetSubfolder
+        for (fN of mediaFiles) {
+            deleteIfExists(targetPath + fN.substring(lenPrefix))
+            sourceFile.copyTo(targetPath + fN.substring(lenPrefix))
+            sourceFile.delete()
+        }
+    }
+
+    moveDocs(incomingFiles: Ingested[], sourceSubfolder: string, targetSubfolder: string) {
+        /// Updates the document stockpile on disk according to the list of ingested files.
+
+        const targetPrefix = rootPath + targetSubfolder
+        const targetMediaPrefix = rootPath + C.mediaSubfolder
+        for (iFile of incomingFiles) {
+                if(iFile.tp == "CreateUpdate") {
+                    const nameId = iFile.fullPath.replace(" ", "")
+                    const sourceHtml = File(rootPath + sourceSubfolder + iFile.fullPath + ".html")
+
+                    const fTarget = File("$targetPrefix$nameId.html")
+                    if (fTarget.exists()) { fTarget.delete() }
+                    fTarget.parentFile.mkdirs()
+                    fTarget.writeText(iFile.content)
+
+                    const fStyleTarget = File("$targetMediaPrefix$nameId.css")
+                    if (fStyleTarget.exists()) { fStyleTarget.delete() }
+                    if (iFile.styleContent != "") {
+                        fStyleTarget.parentFile.mkdirs()
+                        fStyleTarget.writeText(iFile.styleContent)
+                    }
+
+                    if (iFile.jsModules.isNotEmpty()) {
+                        const depsTarget = File("$targetPrefix$nameId.deps")
+                        if (depsTarget.exists()) { depsTarget.delete() }
+
+                        depsTarget.writeText(iFile.jsModules.joinToString("\n"))
+                    }
+
+                    if (sourceHtml.exists()) { sourceHtml.delete() }
+                } else { // "Delete"
+                    const sourceFile = File(rootPath + C.ingestSubfolder + iFile.fullPath + ".html")
+                    deleteIfExists(targetPrefix + iFile.fullPath.replace(" ", "") + ".html")
+                    deleteIfExists(targetPrefix + iFile.fullPath.replace(" ", "") + ".css")
+                    deleteIfExists(targetPrefix + iFile.fullPath.replace(" ", "") + ".deps")
+                    deleteIfExists(sourceFile)
+                }
+            }
+        }
 
     }
 
-    ingestDoc() {
+    readCachedDocs(cache: docCache) {
+        const docsDirN = rootPath + C.docsSubfolder
+        const docsDir = File(docsDirN)
+        const prefixLength = docsDirN.length
+        const arrFiles: FileTreeWalk = docsDir.walk()
+        const emptyList = mutableListOf<String>()
+
+        const fileList = arrFiles.filter { file -> file.isFile && file.name.endsWith(".html")
+                                                 && file.name.length > 5 && file.length() < 2000000 }
+                               .toList()
+
+        fileList.forEach {
+            const address = it.path.substring(prefixLength, it.path.length - 5) // -5 for the ".html"
+            const depsFile = File("$docsDirN$address.deps")
+            const deps = if (depsFile.exists()) {
+                depsFile.readText().split("\n")
+            } else {
+                emptyList
+            }
+
+            const hasCSS = File("$rootPath${C.mediaSubfolder}$address.css").exists()
+
+            const doc = Document(it.readText(), deps, hasCSS, address,
+                               LocalDateTime.ofInstant(
+                                   Instant.ofEpochMilli(it.lastModified()),
+                                   ZoneId.systemDefault()),
+                               -1, false)
+            cache.addDocument(address, doc) }
+    }
+
+
+    readCachedCore(cache: DocCache) {
+        const intakeDirN = rootPath + C.coreSubfolder
+
+        const fileJs = File(intakeDirN + "core.js")
+        if (fileJs.exists()) { cache.coreJS = fileJs.readText() }
+
+        const fileHtmlRoot = File(intakeDirN + "core.html")
+        if (fileHtmlRoot.exists()) {
+            cache.rootPage = Document(fileHtmlRoot.readText(), mutableListOf(),
+                false, "", LocalDateTime.MIN, -1, false)
+        }
+
+        const fileHtmlNotFound = File(intakeDirN + "notFound.html")
+        if (fileHtmlNotFound.exists()) {
+            cache.notFound = Document(fileHtmlNotFound.readText(), mutableListOf(),
+                                      false, "", LocalDateTime.MIN, -1, false)
+        }
+
+        const fileHtmlFooter = File(intakeDirN + "footer.html")
+        if (fileHtmlFooter.exists()) {
+            cache.footer = Document(fileHtmlFooter.readText(), mutableListOf(),
+                                    false, "", LocalDateTime.MIN, -1, false)
+        }
+
+        const fileHtmlTermsUse = File(intakeDirN + "termsOfUse.html")
+        if (fileHtmlTermsUse.exists()) {
+            cache.termsOfUse = Document(fileHtmlTermsUse.readText(), mutableListOf(),
+                                        false, "", LocalDateTime.MIN, -1, false)
+        }
+
+        const fileCss = File(intakeDirN + "core.css")
+        if (fileCss.exists()) { cache.coreCSS = fileCss.readText() }
 
     }
 
-    ingestScripts() {
+    readCachedScripts(docCache: DocCache) {
+        const intakeDirN = rootPath + C.scriptsSubfolder
+        const intakeDir = File(intakeDirN)
+        const prefixLength = intakeDirN.length
+        const arrFiles: FileTreeWalk = intakeDir.walk()
 
+        const fileList = arrFiles.filter { file -> file.isFile && file.name.endsWith(".js")
+                                        && file.name.length > 5 && file.length() < 500000 }
+                               .toList()
+        fileList.forEach {
+            const shortFileName = it.path.substring(prefixLength, it.path.length - 3) // -3 for the ".js"
+            docCache.insertModule(shortFileName)
+        }
     }
 
-    moveMediaFiles() {
-
-    }
-
-    moveDocs() {
-
-    }
-
-    readCachedDocs() {
-
-    }
-
-    readCachedCore() {
-
-    }
-
-    readCachedScripts() {
-
-    }
-
-    moveFile()  {
-
+    moveFile(sourcePath: string, targetPath: string, fNShort: string)  {
+        const file = File(sourcePath + fNShort)
+        var result = ""
+        if (file.exists()) {
+            result = file.readText()
+            const fTarget = File(targetPath + fNShort)
+            if (fTarget.exists()) {
+                fTarget.delete()
+            }
+            fTarget.parentFile.mkdirs()
+            fTarget.writeText(result)
+            file.delete()
+        }
+        return result
     }
 }
+
+//}}}
+//{{{ Templates
+
+const template0 = `
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; base-uri 'self';" />
+`
+
+
+const templateHeadCloseBodyStart = `
+    </head>
+    <body>
+        <div class="__wrapper">
+            <div class="__navbar" id="_theNavBar">
+                <div class="__menuTop">
+                    <div class="__svgButton" title="Temporal sorting">
+                        <a id="_reorderTemporal" title="Temporal sorting">
+                            <svg id="_sorterTemp" class="__swell" width="30" height="30"
+                                viewBox="0 0 100 100">
+                                <circle r="48" cx="50" cy="50" />
+                                <path d="M 35 20 h 30 c 0 30 -30 30 -30 60 h 30
+                                         c 0 -30 -30 -30 -30 -60" />
+                            </svg>
+                        </a>
+                    </div>
+                    <div class="__svgButton">
+                        <a href="http://sozonov.site" title="Home page">
+                            <svg id="__homeIcon" class="__swell" width="30" height="30"
+                             viewBox="0 0 100 100">
+                                <circle r="48" cx="50" cy="50" />
+                                <path d="M 30 45 h 40 v 25 h -40 v -25 " />
+                                <path d="M 22 50 l 28 -25 l 28 25" />
+                            </svg>
+                        </a>
+                    </div>
+                    <div class="__svgButton">
+                        <a id="_reorderThematic" title="Thematic sorting">
+                            <svg class="__swell __sortingBorder" id="_sorterThem"
+                                 width="30" height="30"
+                             viewBox="0 0 100 100">
+                                <circle r="48" cx="50" cy="50" />
+                                <path d="M 35 80 v -60 l 30 60 v -60" />
+                            </svg>
+                    </a>
+                    </div>
+                </div>
+                <div class="__menu" id="__theMenu"></div>
+            </div>
+
+            <div class="__divider" id="_divider">&lt;</div>
+            <div class="__menuToggler __hidden" id="_menuToggler">
+                <div class="__svgButton" title="Open menu">
+                        <a id="_toggleNavBar">
+                            <svg class="__swell" width="30" height="30" viewBox="0 0 100 100">
+                                <circle r="48" cx="50" cy="50"></circle>
+                                <path d="M 30 35 h 40" stroke-width="6"></path>
+                                <path d="M 30 50 h 40" stroke-width="6"></path>
+                                <path d="M 30 65 h 40" stroke-width="6"></path>
+                            </svg>
+                        </a>
+                </div>
+            </div>
+
+
+            <div class="__content">
+`
+
+
+const template4 = `</div>
+        </div>
+    </body>
+</html>
+`
 
 //}}}
 //{{{ Web app
@@ -603,6 +880,10 @@ type Triple<T, U, V> = {
     f1: T;
     f2: U;
     f3: V;
+}
+
+function deleteIfExists(fN: string) {
+
 }
 
 //}}}
