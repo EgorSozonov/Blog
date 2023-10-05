@@ -7,11 +7,13 @@ declare global {
    } 
 }
 
-Array.prototype.last = function(): T {
+Array.prototype.last = function() {
     return this[this.length - 1]
 }
 
 
-String.prototype.pathize = function(): string {
-    return this.endsWith("/") ? this : (this + "/");
+String.prototype.pathize = function(this: string): string {
+    return this.endsWith(`/`) ? this : (this + `/`);
 }
+
+export {}

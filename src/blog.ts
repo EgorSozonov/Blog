@@ -4,6 +4,8 @@ import { Request, Response } from "express"
 import "./extensions"
 const fs = require("fs").promises
 
+const rootPath = process.env.CONTENT_ROOT
+
 //}}}
 //{{{ Constants
 
@@ -79,7 +81,7 @@ class DocCache {
     constructor(private readonly cache: Map<string, Document>, private readonly scriptCache: Set<string>,
                 public coreJs: string,
                 public coreCss: string, public notFound: Document, public footer: Document,
-                public rootPage: string, public termsOfUse: string) {
+                public rootPage: Documrnt, public termsOfUse: Document) {
     }
 
     getModule(modId: string): string | null {
@@ -627,7 +629,7 @@ function ingestScripts(scriptnames: string[], docCache: DocCache, isGlobal: bool
 function moveMediaFiles(mediaFiles: Set<string>, lenPrefix: number, targetSubfolder: string) {
     /// Moves media files references to which were detected to the /_m subfolder.
     const targetPath = rootPath + mediaSubfolder + targetSubfolder
-    for (fN of mediaFiles) {
+    for (let fN of mediaFiles) {
         deleteIfExists(targetPath + fN.substring(lenPrefix))
         sourceFile.copyTo(targetPath + fN.substring(lenPrefix))
         sourceFile.delete()
@@ -638,7 +640,7 @@ function moveDocs(incomingFiles: Ingested[], sourceSubfolder: string, targetSubf
     /// Updates the document stockpile on disk according to the list of ingested files.
 
     const targetPrefix = rootPath + targetSubfolder
-    const targetMediaPrefix = rootPath + C.mediaSubfolder
+    const targetMediaPrefix = rootPath + mediaSubfolder
     for (iFile of incomingFiles) {
         if(iFile.tp == `CreateUpdate`) {
             const nameId = iFile.fullPath.replace(` `, ``)
@@ -673,8 +675,8 @@ function moveDocs(incomingFiles: Ingested[], sourceSubfolder: string, targetSubf
 }
 
 
-function readCachedDocs(cache: docCache) {
-    const docsDirN = rootPath + C.docsSubfolder
+function readCachedDocs(cache: DocCache) {
+    const docsDirN = rootPath + docsSubfolder
     const docsDir = File(docsDirN)
     const prefixLength = docsDirN.length
     const arrFiles: FileTreeWalk = docsDir.walk()
@@ -682,20 +684,15 @@ function readCachedDocs(cache: docCache) {
 
     const fileList = arrFiles.filter (file => file.isFile && file.name.endsWith(`.html`)
                                              && file.name.length > 5 && file.length() < 2000000)
-                           .toList()
+                           .toList();
 
     for (let it of fileList) {
         const address = it.path.substring(prefixLength, it.path.length - 5) // -5 for the `.html`
         const depsFile = File(docsDirN + address + `.deps`)
         const deps = (depsFile.exists()) ? depsFile.readText().split(`\n`) : [];
 
-        const hasCSS = File(rootPath + mediaSubfolder + address + `.css`).exists()
-
-        const doc = new Document(it.readText(), deps, hasCSS, address,
-                           LocalDateTime.ofInstant(
-                               Instant.ofEpochMilli(it.lastModified()),
-                               ZoneId.systemDefault()),
-                           )
+        const fileContent = await readFile(docsDir + it)
+        const doc = new Document(fileContent, deps, address, fileModified)
         cache.addDocument(address, doc)
     }
 }
@@ -707,32 +704,28 @@ async function readCachedCore(cache: DocCache) {
     const fileJs = await readFile(ingestDirN + `core.js`)
     if (fileJs !== ``) { cache.coreJs = fileJs }
 
-    const fileHtmlRoot = File(intakeDirN + `core.html`)
-    if (fileHtmlRoot.exists()) {
-        cache.rootPage = Document(fileHtmlRoot.readText(), [],
-            false, ``, new Date())
+    const fileHtmlRoot = await readFile(ingestDirN + `core.html`)
+    if (fileHtmlRoot !== ``) {
+        cache.rootPage = new Document(fileHtmlRoot, [], ``, new Date())
     }
 
-    const fileHtmlNotFound = File(intakeDirN + `notFound.html`)
-    if (fileHtmlNotFound.exists()) {
-        cache.notFound = Document(fileHtmlNotFound.readText(), [],
-                                  false, ``, new Date())
+    const fileHtmlNotFound = await readFile(ingestDirN + `notFound.html`)
+    if (fileHtmlNotFound !== ``) {
+        cache.notFound = new Document(fileHtmlNotFound, [], ``, new Date())
     }
 
-    const fileHtmlFooter = File(intakeDirN + `footer.html`)
-    if (fileHtmlFooter.exists()) {
-        cache.footer = Document(fileHtmlFooter.readText(), [],
-                                false, ``, new Date())
+    const fileHtmlFooter = await readFile(ingestDirN + `footer.html`)
+    if (fileHtmlFooter !== ``) {
+        cache.footer = new Document(fileHtmlFooter, [], ``, new Date())
     }
 
-    const fileHtmlTermsUse = readFile(intakeDirN + `termsOfUse.html`)
+    const fileHtmlTermsUse = await readFile(ingestDirN + `termsOfUse.html`)
     if (fileHtmlTermsUse !== ``) {
-        cache.termsOfUse = new Document(fileHtmlTermsUse, [],
-                                    false, ``, new Date())
+        cache.termsOfUse = new Document(fileHtmlTermsUse, [], ``, new Date())
     }
 
-    const fileCss = File(intakeDirN + `core.css`)
-    if (fileCss.exists()) { cache.coreCss = fileCss.readText() }
+    const fileCss = await readFile(ingestDirN + `core.css`)
+    if (fileCss !== ``) { cache.coreCss = fileCss }
 }
 
 function readCachedScripts(docCache: DocCache) {
@@ -750,20 +743,19 @@ function readCachedScripts(docCache: DocCache) {
     }
 }
 
-function moveFile(sourcePath: string, targetPath: string, fNShort: string)  {
-    const file = File(sourcePath + fNShort)
-    var result = ``
-    if (file.exists()) {
-        result = file.readText()
-        const fTarget = File(targetPath + fNShort)
-        if (fTarget.exists()) {
-            fTarget.delete()
-        }
-        fTarget.parentFile.mkdirs()
-        fTarget.writeText(result)
-        file.delete()
-    }
-    return result
+async function moveFile(sourcePath: string, targetPath: string, fNShort: string)  {
+    fs.move(sourcePath + fNShort, targetPath + fNShort, err => {
+    });
+
+//~    const fileContent = await readFile(sourcePath + fNShort)
+//~    if (fileContent !== ``) {
+//~        const fNTarget = (targetPath + fNShort)
+//~        deleteIfExists(targetPath + fNShort)
+//~        fNTarget.parentFile.mkdirs()
+//~        fNTarget.writeText(fNTarget)
+//~        file.delete()
+//~    }
+//~    return result
 }
 
 //}}}
@@ -847,7 +839,7 @@ const template4 = `</div>
 
 const express = require( "express" );
 const app = express();
-const port = 8000; // default port to listen
+const port = process.env.PORT; // default port to listen
 
 // define a route handler for the default home page
 app.get( "/", ( req: Request, res: Response ) => {
@@ -856,7 +848,7 @@ app.get( "/", ( req: Request, res: Response ) => {
 
 // start the Express server
 app.listen( port, () => {
-    console.log( `server started at http://localhost:${ port }` );
+    console.log( `server started at http://localhost:` + port);
 });
 
 //}}}
@@ -873,14 +865,14 @@ function deleteIfExists(fN: string) {
 }
 
 async function foo() {
-    await fs.readdir(path, (err, files: string[]) => {
+    await fs.readdir(path, (err: any, files: string[]) => {
         for (let file of files) {
 
         }
     })
 }
 
-async function readFile(fN: string): string {
+async function readFile(fN: string): Promise<string> {
     try {
         const contents = await readFile(fN);
         return contents;
