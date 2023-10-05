@@ -7,14 +7,14 @@ const fs = require("fs").promises
 //}}}
 //{{{ Constants
 
-const appSubfolder = "blog/"
-const ingestSubfolder: String = "_ingest/"
-const ingestCoreSubfolder: String = "_ingestCore/"
-const docsSubfolder = "_d/"
-const mediaSubfolder = "_m/"
-const scriptsSubfolder = "_s/"
-const globalsSubfolder = "_g/"
-const coreSubfolder = "_core/"
+const appSubfolder = `blog/`
+const ingestSubfolder: String = `_ingest/`
+const ingestCoreSubfolder: String = `_ingestCore/`
+const docsSubfolder = `_d/`
+const mediaSubfolder = `_m/`
+const scriptsSubfolder = `_s/`
+const globalsSubfolder = `_g/`
+const coreSubfolder = `_core/`
 const updateFreq = 300 // seconds before the cache gets rescanned
 
 //}}}
@@ -46,12 +46,13 @@ class Blog {
 class Document {
     pageId: number;
     wasAddedDb: boolean;
-    constructor(readonly cont: string, readonly scriptDeps: string[], readonly hasCss: boolean,
+    constructor(readonly cont: string, readonly scriptDeps: string[],
                 readonly pathCaseSen: string, modified: Date) {
         pageId = -1;
         wasAddedDb = false;
     }
 }
+
 
 class CreateUpdateDoc {
     readonly tp: string;
@@ -70,11 +71,15 @@ class DeleteDoc {
 
 type Ingested = CreateUpdateDoc | DeleteDoc
 
+function docOfIngested(ingested: CreateUpdateDoc): Document {
+    return new Document(ingested.cont, ingested.jsModules, ingested.fullPath, ingested.modified);
+}
+
 class DocCache {
     constructor(private readonly cache: Map<string, Document>, private readonly scriptCache: Set<string>,
-                private coreJs: string,
-                private coreCss: string, private notFound: Document, private footer: Document,
-                private rootPage: string, private termsUse: string) {
+                public coreJs: string,
+                public coreCss: string, public notFound: Document, public footer: Document,
+                public rootPage: string, public termsOfUse: string) {
     }
 
     getModule(modId: string): string | null {
@@ -154,7 +159,7 @@ class DocCache {
     updateCoreDocFromIngested(ingested: Ingested?, existing: Document): Document {
         /// Updates core HTML docs from ingested files. They are never deleted, only updated.
         return (ingested != null && ingested.tp == `CreateUpdate`) ?
-            new Document(ingested.cont, ingested.jsModules,...) : existing;
+            docOfIngested(ingested) : existing;
     }
 }
 
@@ -319,7 +324,7 @@ class NavTree {
     }
 
     temporalOf(pages: [string, Date][]): NavTree {
-        const pagesByDate = pages.sortedWith(compareBy it[1]);
+        const pagesByDate = pages.sort((x, y) => x[1] - y[1]);
         const st = []
         const root = new NavTree(``, [])
         for (let pag of pagesByDate)  {
@@ -363,7 +368,7 @@ function rewriteLinks(cont: string, ingestPath: string, fileSubpath: string): st
     const result = ``
     let prevInd = 0
     let currInd = 0
-    const indLastSlash = fileSubpath.lastIndexOf("/")
+    const indLastSlash = fileSubpath.lastIndexOf(`/`)
     const fileSubfolder = (indLastSlash < 1)
         ? `` : fileSubpath.substring(0, indLastSlash).pathize();
     while (true)  {
@@ -379,7 +384,7 @@ function rewriteLinks(cont: string, ingestPath: string, fileSubpath: string): st
         if (indClosingQuote > -1) {
             const link = cont.substring(currInd + 5, indClosingQuote) // cutting off the initial src="
             const sourcePath = (ingestPath + fileSubfolder).pathize() + link
-            const targetSubpath = "/" + appSubfolder + mediaSubfolder + fileSubfolder + link
+            const targetSubpath = `/` + appSubfolder + mediaSubfolder + fileSubfolder + link
             if (fs.existsSync()) mediaFiles.push(sourcePath);
             result += targetSubpath
             currInd = indClosingQuote
@@ -391,36 +396,39 @@ function rewriteLinks(cont: string, ingestPath: string, fileSubpath: string): st
 
 function parseJsModuleNames(fileContent: string, fileSubfolder: string): string[] {
     const result = []
-    const headStart = fileContent.indexOf("<head>", 0, true)
+    const headStart = fileContent.indexOf(`<head>`, 0, true)
     if (headStart < 0) {
         return result
     }
 
-    const headEnd = fileContent.indexOf("</head>", headStart, true)
+    const headEnd = fileContent.indexOf(`</head>`, headStart, true)
     if (headEnd < 0) {
         return result
     }
 
     let i = 0
     while (true) {
-        i = headString.index("<script", i, true)
+        i = headString.index(`<script`, i, true)
         if (i < 0) {
             break
         }
         i += 7 // +7 for the "<script"
 
-        const j = headString.indexOf(">", i, true)
+        const j = headString.indexOf(`>`, i, true)
         const spl = headString.substring(i, j).split(` `)
 
-        const srcString = spl.firstOrNull { it.startsWith(`src="`) } ?: continue
+        const srcString = spl.firstOrNull(x => x.startsWith(`src="`));
+        if (srcString === -1) {
+            continue;
+        }
 
-        const indJs = srcString.indexOf(".js", 5, true) // 5 for `src="`
+        const indJs = srcString.indexOf(`.js`, 5, true) // 5 for `src="`
         if (indJs < 0) {
             continue
         }
 
         const rawModuleName = srcString.substring(5, indJs)
-        if (rawModuleName.startsWith("./")) {
+        if (rawModuleName.startsWith(`./`)) {
             result.push(fileSubfolder + rawModuleName.substring(2))
         } else {
             result.push(globalsSubfolder + rawModuleName)
@@ -432,9 +440,9 @@ function parseJsModuleNames(fileContent: string, fileSubfolder: string): string[
 function rewriteScriptImports(script: string, subfolder: string): string {
     /// Rewrites the JokeScript imports to correctly reference files on the server, including
     /// global imports
-    const spl = script.split("\n")
+    const spl = script.split(`\n`)
     let i = 0
-    while (i < spl.size && spl[i].startsWith("import")) {
+    while (i < spl.size && spl[i].startsWith(`import`)) {
         i++;
     }
     for (let j = 0; j < i; j++) {
@@ -446,18 +454,18 @@ function rewriteScriptImports(script: string, subfolder: string): string {
         if (tail.startsWith(`global/`)) {
             spl[j] = spl[j].substring(0, indFrom + 1) + scriptPrefix + globalsSubfolder +
                     spl[j].substring(indFrom + 8) // +8 for the `"global/`
-        } else if (tail.startsWidth("./")) {
+        } else if (tail.startsWidth(`./`)) {
             spl[j] = spl[j].substring(0, indFrom + 1) + scriptPrefix + subfolder +
                     spl[j].substring(indFrom + 3) // +3 for `"./`
         } else  {
             return ``
         }
     }
-    return spl.joinToString("\n")
+    return spl.joinToString(`\n`)
 }
 
 
-getHtmlBodyStyle(html: string, ingestPath: string, fileSubpath: string, mediaFiles: Set<String>)
+function getHtmlBodyStyle(html: string, ingestPath: string, fileSubpath: string, mediaFiles: Set<String>)
       : [string, string] {
     const indStart = html.indexOf(`<body>`)
     const indEnd = html.lastIndexOf(`</body>`)
@@ -491,7 +499,7 @@ type IngestedJsModule = {
     modified: Date;
 }
 
-ingestFiles(rootPath: string, docCache: DocCache): [Ingested[], IngestedCore] {
+function ingestFiles(rootPath: string, docCache: DocCache): [Ingested[], IngestedCore] {
     /// Ingests all input files (core, scripts and docs), moves them to the internal file cache,
     /// and returns the results so that the docs and core files can be updated in memory
     const ingestCorePath = rootPath + ingestCoreSubfolder
@@ -501,11 +509,17 @@ ingestFiles(rootPath: string, docCache: DocCache): [Ingested[], IngestedCore] {
     const ingestPath = rootPath + ingestSubfolder
     const lengthPrefix = ingestPath.length
     const ingestDir = File(ingestPath)
-    const arrFiles = fs.readdirSync(ingestDir)
+    const fileNames = await fs.readdir(ingestDir)
+
+    for (let file of fileNames) {
+        const extension = path.extname(file);
+        const fileSizeInBytes = fs.statSync(route + file).size;
+        response.push({ name: file, extension, fileSizeInBytes });
+    }
     const mediaFiles = new Set<string>(10)
 
     const scriptNames = arrFiles
-        .filter(file -> file.isFile && file.name.endsWith(".js") && file.name.length > 5
+        .filter(file => file.isFile && file.name.endsWith(`.js`) && file.name.length > 5
                 && file.length() < 2000000)
         .map (ingestDoc(it, ingestPath, mediaFiles));
 
@@ -522,18 +536,18 @@ ingestFiles(rootPath: string, docCache: DocCache): [Ingested[], IngestedCore] {
     return [docFiles, ingestedCore]
 }
 
-ingestCoreFiles(ingestCorePath: string, docCache: DocCache, lenPrefix: number): IngestedCore {
-    const js = moveFile(ingestCorePath, rootPath + scriptsSubfolder + globalsSubfolder, "core.js")
-    const css = moveFile(ingestCorePath, rootPath + mediaSubfolder + globalsSubfolder, "core.css")
-    const favicon = moveFile(ingestCorePath, rootPath + mediaSubfolder, "favicon.ico")
+function ingestCoreFiles(ingestCorePath: string, docCache: DocCache, lenPrefix: number): IngestedCore {
+    const js = moveFile(ingestCorePath, rootPath + scriptsSubfolder + globalsSubfolder, `core.js`)
+    const css = moveFile(ingestCorePath, rootPath + mediaSubfolder + globalsSubfolder, `core.css`)
+    const favicon = moveFile(ingestCorePath, rootPath + mediaSubfolder, `favicon.ico`)
 
     const mediaFiles = new Set<string>();
     const ingestedCoreHtml = []
 
-    const htmlNotFound = ingestDoc(ingestCorePath + "notFound.html", mediaFiles)
-    const htmlFooter = ingestDoc(ingestCorePath + "footer.html", mediaFiles)
-    const htmlBasePage = ingestDoc(ingestCorePath + "core.html", mediaFiles)
-    const htmlTermsUse = ingestDoc(ingestCorePath + "termsOfUse.html", mediaFiles)
+    const htmlNotFound = ingestDoc(ingestCorePath + `notFound.html`, mediaFiles)
+    const htmlFooter = ingestDoc(ingestCorePath + `footer.html`, mediaFiles)
+    const htmlBasePage = ingestDoc(ingestCorePath + `core.html`, mediaFiles)
+    const htmlTermsUse = ingestDoc(ingestCorePath + `termsOfUse.html`, mediaFiles)
 
     if (htmlNotFound !== ``) {
         ingestedCoreHtml.add(htmlNotFound)
@@ -549,7 +563,7 @@ ingestCoreFiles(ingestCorePath: string, docCache: DocCache, lenPrefix: number): 
     }
     const arrFiles = walk(ingestCorePath)
 
-    const scriptNames = arrFiles.filter(file => file.isFIle && file.name.endsWith(".js")
+    const scriptNames = arrFiles.filter(file => file.isFIle && file.name.endsWith(`.js`)
                                         && file.name.length > 5 && file.length() < 500000)
                                         .map(a => a.absolutePath);
     moveMediaFiles(mediaFiles, rootPath, lenPrefix)
@@ -559,7 +573,7 @@ ingestCoreFiles(ingestCorePath: string, docCache: DocCache, lenPrefix: number): 
     return new IngestedCore(js, css, htmlNotFound, htmlFooter, htmlBasePage, htmlTermsUse)
 }
 
-ingestDoc(file: File, ingestPath: string, mediaFiles: Set<string>): Ingested {
+function ingestDoc(file: File, ingestPath: string, mediaFiles: Set<string>): Ingested {
     /// Performs ingestion of an input file: reads its contents, detects referenced
     /// media files and script modules, rewrites the links to them, and decides whether this is an
     /// update/new doc or a delete.
@@ -571,15 +585,15 @@ ingestDoc(file: File, ingestPath: string, mediaFiles: Set<string>): Ingested {
     const fileContent = file.readText()
     const [content, styleContent] = getHtmlBodyStyle(
             fileContent, ingestPath, fileSubpath, mediaFiles);
-    if (content.length < 5 && content.trim() == ``) {
-        return Delete{fullPath: fileSubpath};
+    if (content.length < 5 && content.trim() === ``) {
+        return new Delete(fileSubpath);
     }
     const jsModuleNames = parseJsModuleNames(fileContent, fileSubfolder)
 
     return new CreateUpdateDoc(fileSubpath, content, styleContent, dateLastModified, jsModuleNames)
 }
 
-ingestScripts(scriptnames: string[], docCache: DocCache, isGlobal: boolean) {
+function ingestScripts(scriptnames: string[], docCache: DocCache, isGlobal: boolean) {
     /// Ingests script module files, determines their names, and puts them into the cache folder.
     const targetPath = rootPath + scriptsSubfolder
 
@@ -596,8 +610,8 @@ ingestScripts(scriptnames: string[], docCache: DocCache, isGlobal: boolean) {
             (globalsSubfolder + fN.substring(prefixLength, fN.length - 3)) // -3 for ".js"
             : (subfolder + sourceFile.name.substring(0, sourceFile.name.length - 3));
 
-        docCache.insertModule(modId)
-        const targetFile = File(targetPath + modId + ".js")
+        docCache.addModule(modId)
+        const targetFile = File(targetPath + modId + `.js`)
 
         if (subfolder.length > 0) {
             Files.createDirectories(Path.of(targetPath + subfolder))
@@ -610,7 +624,7 @@ ingestScripts(scriptnames: string[], docCache: DocCache, isGlobal: boolean) {
     }
 }
 
-moveMediaFiles(mediaFiles: Set<string>, lenPrefix: number, targetSubfolder: string) {
+function moveMediaFiles(mediaFiles: Set<string>, lenPrefix: number, targetSubfolder: string) {
     /// Moves media files references to which were detected to the /_m subfolder.
     const targetPath = rootPath + mediaSubfolder + targetSubfolder
     for (fN of mediaFiles) {
@@ -620,22 +634,22 @@ moveMediaFiles(mediaFiles: Set<string>, lenPrefix: number, targetSubfolder: stri
     }
 }
 
-moveDocs(incomingFiles: Ingested[], sourceSubfolder: string, targetSubfolder: string) {
+function moveDocs(incomingFiles: Ingested[], sourceSubfolder: string, targetSubfolder: string) {
     /// Updates the document stockpile on disk according to the list of ingested files.
 
     const targetPrefix = rootPath + targetSubfolder
     const targetMediaPrefix = rootPath + C.mediaSubfolder
     for (iFile of incomingFiles) {
-        if(iFile.tp == "CreateUpdate") {
+        if(iFile.tp == `CreateUpdate`) {
             const nameId = iFile.fullPath.replace(` `, ``)
             const sourceHtml = File(rootPath + sourceSubfolder + iFile.fullPath + ".html")
 
-            const fTarget = File("$targetPrefix$nameId.html")
-            if (fTarget.exists()) { fTarget.delete() }
+            const fTarget = File(targetPrefix + nameId + `.html`)
+            if (fTarget.exists()) { fTarget.delete(); }
             fTarget.parentFile.mkdirs()
             fTarget.writeText(iFile.content)
 
-            const fStyleTarget = File("$targetMediaPrefix$nameId.css")
+            const fStyleTarget = File(targetMediaPrefix + nameId + `.css`)
             if (fStyleTarget.exists()) { fStyleTarget.delete() }
             if (iFile.styleContent != ``) {
                 fStyleTarget.parentFile.mkdirs()
@@ -643,102 +657,100 @@ moveDocs(incomingFiles: Ingested[], sourceSubfolder: string, targetSubfolder: st
             }
 
             if (iFile.jsModules.isNotEmpty()) {
-                const depsTarget = File("$targetPrefix$nameId.deps")
+                const depsTarget = File(targetPrefix + nameId + `.deps`)
                 if (depsTarget.exists()) { depsTarget.delete() }
 
-                depsTarget.writeText(iFile.jsModules.joinToString("\n"))
+                depsTarget.writeText(iFile.jsModules.joinToString(`\n`))
             }
 
             if (sourceHtml.exists()) { sourceHtml.delete() }
         } else { // "Delete"
-            const sourceFile = File(rootPath + C.ingestSubfolder + iFile.fullPath + ".html")
-            deleteIfExists(targetPrefix + iFile.fullPath.replace(` `, ``) + ".html")
-            deleteIfExists(targetPrefix + iFile.fullPath.replace(` `, ``) + ".css")
-            deleteIfExists(targetPrefix + iFile.fullPath.replace(` `, ``) + ".deps")
-            deleteIfExists(sourceFile)
+            deleteIfExists(targetPrefix + iFile.fullPath.replace(` `, ``) + `.html`)
+            deleteIfExists(targetPrefix + iFile.fullPath.replace(` `, ``) + `.deps`)
+            deleteIfExists(rootPath + ingestSubfolder + iFile.fullPath + `.html`)
         }
     }
 }
 
 
-readCachedDocs(cache: docCache) {
+function readCachedDocs(cache: docCache) {
     const docsDirN = rootPath + C.docsSubfolder
     const docsDir = File(docsDirN)
     const prefixLength = docsDirN.length
     const arrFiles: FileTreeWalk = docsDir.walk()
     const emptyList = mutableListOf<String>()
 
-    const fileList = arrFiles.filter { file -> file.isFile && file.name.endsWith(".html")
-                                             && file.name.length > 5 && file.length() < 2000000 }
+    const fileList = arrFiles.filter (file => file.isFile && file.name.endsWith(`.html`)
+                                             && file.name.length > 5 && file.length() < 2000000)
                            .toList()
 
-    fileList.forEach {
+    for (let it of fileList) {
         const address = it.path.substring(prefixLength, it.path.length - 5) // -5 for the `.html`
-        const depsFile = File("$docsDirN$address.deps")
-        const deps = (depsFile.exists()) ? depsFile.readText().split("\n") : [];
+        const depsFile = File(docsDirN + address + `.deps`)
+        const deps = (depsFile.exists()) ? depsFile.readText().split(`\n`) : [];
 
         const hasCSS = File(rootPath + mediaSubfolder + address + `.css`).exists()
 
-        const doc = Document(it.readText(), deps, hasCSS, address,
+        const doc = new Document(it.readText(), deps, hasCSS, address,
                            LocalDateTime.ofInstant(
                                Instant.ofEpochMilli(it.lastModified()),
                                ZoneId.systemDefault()),
-                           -1, false)
+                           )
         cache.addDocument(address, doc)
     }
 }
 
 
-readCachedCore(cache: DocCache) {
-    const intakeDirN = rootPath + C.coreSubfolder
+async function readCachedCore(cache: DocCache) {
+    const ingestDirN = rootPath + coreSubfolder
 
-    const fileJs = File(intakeDirN + `core.js`)
-    if (fileJs.exists()) { cache.coreJS = fileJs.readText() }
+    const fileJs = await readFile(ingestDirN + `core.js`)
+    if (fileJs !== ``) { cache.coreJs = fileJs }
 
     const fileHtmlRoot = File(intakeDirN + `core.html`)
     if (fileHtmlRoot.exists()) {
-        cache.rootPage = Document(fileHtmlRoot.readText(), mutableListOf(),
-            false, ``, LocalDateTime.MIN, -1, false)
+        cache.rootPage = Document(fileHtmlRoot.readText(), [],
+            false, ``, new Date())
     }
 
     const fileHtmlNotFound = File(intakeDirN + `notFound.html`)
     if (fileHtmlNotFound.exists()) {
-        cache.notFound = Document(fileHtmlNotFound.readText(), mutableListOf(),
-                                  false, ``, LocalDateTime.MIN, -1, false)
+        cache.notFound = Document(fileHtmlNotFound.readText(), [],
+                                  false, ``, new Date())
     }
 
     const fileHtmlFooter = File(intakeDirN + `footer.html`)
     if (fileHtmlFooter.exists()) {
-        cache.footer = Document(fileHtmlFooter.readText(), mutableListOf(),
-                                false, ``, LocalDateTime.MIN, -1, false)
+        cache.footer = Document(fileHtmlFooter.readText(), [],
+                                false, ``, new Date())
     }
 
-    const fileHtmlTermsUse = File(intakeDirN + `termsOfUse.html`)
-    if (fileHtmlTermsUse.exists()) {
-        cache.termsOfUse = Document(fileHtmlTermsUse.readText(), mutableListOf(),
-                                    false, ``, LocalDateTime.MIN, -1, false)
+    const fileHtmlTermsUse = readFile(intakeDirN + `termsOfUse.html`)
+    if (fileHtmlTermsUse !== ``) {
+        cache.termsOfUse = new Document(fileHtmlTermsUse, [],
+                                    false, ``, new Date())
     }
 
     const fileCss = File(intakeDirN + `core.css`)
-    if (fileCss.exists()) { cache.coreCSS = fileCss.readText() }
+    if (fileCss.exists()) { cache.coreCss = fileCss.readText() }
 }
 
-readCachedScripts(docCache: DocCache) {
-    const intakeDirN = rootPath + C.scriptsSubfolder
+function readCachedScripts(docCache: DocCache) {
+    const intakeDirN = rootPath + scriptsSubfolder
     const intakeDir = File(intakeDirN)
     const prefixLength = intakeDirN.length
     const arrFiles: FileTreeWalk = intakeDir.walk()
 
-    const fileList = arrFiles.filter { file -> file.isFile && file.name.endsWith(`.js`)
-                                    && file.name.length > 5 && file.length() < 500000 }
-                           .toList()
-    fileList.forEach {
+    const fileList = arrFiles.filter(file => file.isFile && file.name.endsWith(`.js`)
+                                    && file.name.length > 5 && file.length() < 500000)
+                           .toList();
+    for(let it of fileList) {
         const shortFileName = it.path.substring(prefixLength, it.path.length - 3) // -3 for the ".js"
-        docCache.insertModule(shortFileName)
+        docCache.addModule(shortFileName)
     }
 }
 
-moveFile(sourcePath: string, targetPath: string, fNShort: string)  {
+function moveFile(sourcePath: string, targetPath: string, fNShort: string)  {
     const file = File(sourcePath + fNShort)
     var result = ``
     if (file.exists()) {
@@ -860,12 +872,12 @@ function deleteIfExists(fN: string) {
     fs.rm(fN, {force: true});
 }
 
-function foo() {
+async function foo() {
     await fs.readdir(path, (err, files: string[]) => {
         for (let file of files) {
 
         }
-    }
+    })
 }
 
 async function readFile(fN: string): string {
@@ -873,7 +885,7 @@ async function readFile(fN: string): string {
         const contents = await readFile(fN);
         return contents;
     } catch(err) {
-        return ""
+        return ``
     }
 }
 

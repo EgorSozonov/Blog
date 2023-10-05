@@ -8,5 +8,5 @@ node_modules/*
 
 tags
 
-
+*.xz
 .stack-work/*
