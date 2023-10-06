@@ -1,0 +1,28 @@
+
+
+
+Events:
+1. Turn on with existing cache: sync-ingest and sync-scan
+2. update a core js module
+3. Update the core css file
+4. update a media file/document js file
+5. add a document
+6. update a document
+7. delete a document
+
+
+1 => ingest files, then read the docs into doc cache, create deps list, then start serving
+2 => regenerate html files depending on this module, update them in the doc cache,
+     add the module to cleanup list
+3 => regenerate all html files, regenerate doc cache, add the css to cleanup list
+4 => regenerate just this one document, update it in doc cache, add media to cleanup list
+5 => ingest file, move media files, add to the deps list, add it to doc cache,
+     regenerate all html files
+6 => rewrite just this one document, move any new media files and add the discarded ones
+     ones to cleanup, update it in the doc cache, update all deps lists
+7 => rewrite all html files, remove form doc cache, update all the deps lists, add
+     all media files to cleanup list, delete the html file
+
+
+
+deps file: list of modules, and for each module documents depending on that module

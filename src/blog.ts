@@ -8,20 +8,33 @@ const fs = require("fs").promises
 const rootPath = process.env.CONTENT_ROOT ?? `` // TODO
 
 //}}}
-//{{{ Constants
+//{{{ Core data structures
 
-const appSubfolder = `blog/`
-const ingestSubfolder = `_ingest/`
-const ingestCoreSubfolder = `_ingestCore/`
-const docsSubfolder = `_d/`
-const mediaSubfolder = `_m/`
-const scriptsSubfolder = `_s/`
-const globalsSubfolder = `_g/`
-const coreSubfolder = `_core/`
-const updateFreq = 300 // seconds before the cache gets rescanned
+type Deps = {
+    /// The deps list that is used to rewrite just the files that depend on a JS module
+    modules: Module[]
+}
+
+type DocName = {
+    name: string
+}
+
+type Module = {
+    /// A core JS module
+    name: string;
+    version: number;
+    dependents: DocName[]; // names like "programming/foo"
+}
+
+type Cleanup = {
+    /// A media/script file to delete, with a timestamp of when
+    docN: DocName[];
+    fN: string;
+    when: Date;
+}
 
 //}}}
-//{{{ Blog core
+//{{{ Blog and its events
 
 class Blog {
     constructor(private docCache: DocCache,
@@ -41,7 +54,62 @@ class Blog {
         navTime = navTrees.f2
         updated = new Date()
     }
+
+
+    start() {
+        /// App startup. Ingest core files & docs, then read the docs into doc cache,
+        /// create deps list, then start serving
+    }
+
+    updateCoreJs() {
+        /// regenerate html files depending on this module, update them in the doc cache,
+        /// add the module to cleanup list
+
+    }
+
+    updateCss(css: string) {
+        /// Regenerate all html files, regenerate doc cache, add the css to cleanup list
+
+    }
+
+    updateMedia() {
+        /// Regenerate just this one document, update it in doc cache, add media to cleanup list
+
+    }
+
+    addDoc(doc: Document) {
+        /// Ingest file, move media files, add to the deps list, add it to doc cache,
+        /// regenerate all html files
+
+    }
+
+    private updateDoc(doc: Document)  {
+        /// Rewrite just this one document, move any new media files and add the discarded ones
+        /// ones to cleanup, update it in the doc cache, update all deps lists
+
+
+    }
+
+    deleteDoc(name: DocName)  {
+        /// rewrite all html files, remove form doc cache, update all the deps lists, add
+        /// all media files to cleanup list, delete the html file
+
+
+    }
 }
+
+//}}}
+//{{{ Constants
+
+const appSubfolder = `blog/`
+const ingestSubfolder = `_ingest/`
+const ingestCoreSubfolder = `_ingestCore/`
+const docsSubfolder = `_d/`
+const mediaSubfolder = `_m/`
+const scriptsSubfolder = `_s/`
+const globalsSubfolder = `_g/`
+const coreSubfolder = `_core/`
+const updateFreq = 300 // seconds before the cache gets rescanned
 
 //}}}
 //{{{ Document cache
@@ -292,7 +360,7 @@ class NavTree {
             }
         }
         if(lenX != lenY) {
-            return lenY.compareTo(lenX)
+            return lenY - lenX
         } else {
             return x.subfolders.last().compareTo(y.subfolders.last())
         }
