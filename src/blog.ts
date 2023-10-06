@@ -2,16 +2,17 @@
 
 import { Request, Response } from "express"
 import "./extensions"
+import { Stats } from "node"
 const fs = require("fs").promises
 
-const rootPath = process.env.CONTENT_ROOT
+const rootPath = process.env.CONTENT_ROOT ?? `` // TODO
 
 //}}}
 //{{{ Constants
 
 const appSubfolder = `blog/`
-const ingestSubfolder: String = `_ingest/`
-const ingestCoreSubfolder: String = `_ingestCore/`
+const ingestSubfolder = `_ingest/`
+const ingestCoreSubfolder = `_ingestCore/`
 const docsSubfolder = `_d/`
 const mediaSubfolder = `_m/`
 const scriptsSubfolder = `_s/`
@@ -463,7 +464,7 @@ function rewriteScriptImports(script: string, subfolder: string): string {
             return ``
         }
     }
-    return spl.joinToString(`\n`)
+    return spl.join(`\n`)
 }
 
 
@@ -501,7 +502,7 @@ type IngestedJsModule = {
     modified: Date;
 }
 
-function ingestFiles(rootPath: string, docCache: DocCache): [Ingested[], IngestedCore] {
+async function ingestFiles(rootPath: string, docCache: DocCache): Promise<[Ingested[], IngestedCore]> {
     /// Ingests all input files (core, scripts and docs), moves them to the internal file cache,
     /// and returns the results so that the docs and core files can be updated in memory
     const ingestCorePath = rootPath + ingestCoreSubfolder
@@ -531,169 +532,167 @@ function ingestFiles(rootPath: string, docCache: DocCache): [Ingested[], Ingeste
     const docDir = File(rootPath + docsSubfolder)
     if (!docDir.exists()) {docDir.mkdirs()}
 
-    moveMediaFiles(mediaFiles, rootPath, lengthPrefix)
-    ingestScripts(scriptNames, rootPath, docCache, false)
+    moveMediaFiles(mediaFiles, lengthPrefix)
+    ingestScripts(scriptNames, docCache, false)
     moveDocs(docFiles, rootPath, ingestSubfolder, docsSubfolder)
 
     return [docFiles, ingestedCore]
 }
 
-function ingestCoreFiles(ingestCorePath: string, docCache: DocCache, lenPrefix: number): IngestedCore {
-    const js = moveFile(ingestCorePath, rootPath + scriptsSubfolder + globalsSubfolder, `core.js`)
-    const css = moveFile(ingestCorePath, rootPath + mediaSubfolder + globalsSubfolder, `core.css`)
-    const favicon = moveFile(ingestCorePath, rootPath + mediaSubfolder, `favicon.ico`)
+async function ingestCoreFiles(ingestCorePath: string, docCache: DocCache, lenPrefix: number):
+        Promise<IngestedCore> {
+    const js = await moveFile(ingestCorePath, rootPath + scriptsSubfolder + globalsSubfolder, `core.js`)
+    const css = await moveFile(ingestCorePath, rootPath + mediaSubfolder + globalsSubfolder, `core.css`)
+    const favicon = await moveFile(ingestCorePath, rootPath + mediaSubfolder, `favicon.ico`)
 
     const mediaFiles = new Set<string>();
-    const ingestedCoreHtml = []
+    const ingestedCoreHtml: IngestedCore[] = []
 
-    const htmlNotFound = ingestDoc(ingestCorePath + `notFound.html`, mediaFiles)
-    const htmlFooter = ingestDoc(ingestCorePath + `footer.html`, mediaFiles)
-    const htmlBasePage = ingestDoc(ingestCorePath + `core.html`, mediaFiles)
-    const htmlTermsUse = ingestDoc(ingestCorePath + `termsOfUse.html`, mediaFiles)
+    const htmlNotFound = await ingestDoc(ingestCorePath + `notFound.html`, mediaFiles)
+    const htmlFooter = await ingestDoc(ingestCorePath + `footer.html`, mediaFiles)
+    const htmlBasePage = await ingestDoc(ingestCorePath + `core.html`, mediaFiles)
+    const htmlTermsOfUse = await ingestDoc(ingestCorePath + `termsOfUse.html`, mediaFiles)
 
-    if (htmlNotFound !== ``) {
-        ingestedCoreHtml.add(htmlNotFound)
+    if (htmlNotFound != null) {
+        ingestedCoreHtml.push(htmlNotFound)
     }
-    if (htmlFooter !== ``) {
-        ingestedCoreHtml.add(htmlFooter)
+    if (htmlFooter != null) {
+        ingestedCoreHtml.push(htmlFooter)
     }
-    if (htmlBasePage !== ``) {
-        ingestedCoreHtml.add(htmlBasePage)
+    if (htmlBasePage != null) {
+        ingestedCoreHtml.push(htmlBasePage)
     }
-    if (htmlTerms !== ``) {
-        ingestedCoreHtml.add(htmlTerms)
+    if (htmlTermsOfUse != null) {
+        ingestedCoreHtml.push(htmlTermsOfUse)
     }
-    const arrFiles = walk(ingestCorePath)
+    const arrFiles = await fs.readdir(ingestCorePath)
 
-    const scriptNames = arrFiles.filter(file => file.isFIle && file.name.endsWith(`.js`)
-                                        && file.name.length > 5 && file.length() < 500000)
-                                        .map(a => a.absolutePath);
-    moveMediaFiles(mediaFiles, rootPath, lenPrefix)
-    ingestScripts(scriptNames, rootPath, docCache, true)
-    moveDocs(ingestedCoreHtml, rootPath, ingestCoreSubfolder, coreSubfolder)
+    const scriptNames = arrFiles.filter((file: string) => file.endsWith(`.js`) && file.length > 5);
+    await moveMediaFiles(mediaFiles, lenPrefix)
+    await ingestScripts(scriptNames, docCache, true)
+    await moveDocs(ingestedCoreHtml, ingestCoreSubfolder, coreSubfolder)
 
-    return new IngestedCore(js, css, htmlNotFound, htmlFooter, htmlBasePage, htmlTermsUse)
+    return {js, css, htmlNotFound, htmlFooter, htmlBasePage, htmlTermsOfUse}
 }
 
-function ingestDoc(file: File, ingestPath: string, mediaFiles: Set<string>): Ingested {
+async function ingestDoc(file: Stats, ingestPath: string, mediaFiles: Set<string>):
+        Promise<Ingested | null> {
     /// Performs ingestion of an input file: reads its contents, detects referenced
     /// media files and script modules, rewrites the links to them, and decides whether this is an
     /// update/new doc or a delete.
+    const fileContent = await readFile(file)
+    if (fileContent === ``)  {
+        return null
+    }
     const lastModified = file.lastModified()
     const indLastPeriod = file.path.lastIndexOf(`.`);
     const fileSubpath = file.path.substring(ingestPath.length, indLastPeriod) // "topic/subt/file"
     const indLastSlash = file.path.lastIndexOf(`/`)
-    const fileSubfolder = file.path.substring(ingestPath.length, indLastSlash = 1) // "topic/subt/"
-    const fileContent = file.readText()
+    const fileSubfolder = file.path.substring(ingestPath.length, indLastSlash - 1) // "topic/subt/"
     const [content, styleContent] = getHtmlBodyStyle(
             fileContent, ingestPath, fileSubpath, mediaFiles);
     if (content.length < 5 && content.trim() === ``) {
-        return new Delete(fileSubpath);
+        return new DeleteDoc(fileSubpath);
     }
     const jsModuleNames = parseJsModuleNames(fileContent, fileSubfolder)
 
-    return new CreateUpdateDoc(fileSubpath, content, styleContent, dateLastModified, jsModuleNames)
+    return new CreateUpdateDoc(fileSubpath, content, styleContent, new Date(file.mtime), jsModuleNames)
 }
 
-function ingestScripts(scriptnames: string[], docCache: DocCache, isGlobal: boolean) {
+async function ingestScripts(scriptNames: string[], docCache: DocCache, isGlobal: boolean) {
     /// Ingests script module files, determines their names, and puts them into the cache folder.
     const targetPath = rootPath + scriptsSubfolder
 
-    Files.createDirectories(Path.of(targetPath))
+    const success = await createDir(targetPath)
+    if (!success)  {
+        return
+    }
 
     const prefixLength = rootPath.length +
         (isGlobal ? ingestCoreSubfolder.length : ingestSubfolder.length);
-    for (fN of scriptNames) {
-        const scriptContent = sourceFile.readText()
-        const subfolder = fN.substring(prefixLength, fN.length - sourceFile.name.length)
-        const rewrittenContent = Rewriter.rewriteScriptImports(scriptContent, subfolder)
+    for (let fN of scriptNames) {
+        const sourceFile = rootPath + fN
+        const scriptContent = await readFile(sourceFile)
+        const subfolder = fN.substring(prefixLength, fN.length - sourceFile.length)
+        const rewrittenContent = rewriteScriptImports(scriptContent, subfolder)
 
         const modId = (isGlobal) ?
             (globalsSubfolder + fN.substring(prefixLength, fN.length - 3)) // -3 for ".js"
-            : (subfolder + sourceFile.name.substring(0, sourceFile.name.length - 3));
+            : (subfolder + sourceFile.substring(0, sourceFile.length - 3));
 
         docCache.addModule(modId)
-        const targetFile = File(targetPath + modId + `.js`)
+        const targetFile = (targetPath + modId + `.js`)
 
         if (subfolder.length > 0) {
-            Files.createDirectories(Path.of(targetPath + subfolder))
+            await createDir(targetPath + subfolder)
         } else {
-            Files.createDirectories(Path.of(targetPath + globalsSubfolder))
+            await createDir(targetPath + globalsSubfolder)
         }
 
-        targetFile.writeText(rewrittenContent)
-        sourceFile.delete()
+        await writeText(targetFile, rewrittenContent)
+        await fs.rm(sourceFile)
     }
 }
 
-function moveMediaFiles(mediaFiles: Set<string>, lenPrefix: number, targetSubfolder: string) {
+async function moveMediaFiles(mediaFiles: Set<string>, lenPrefix: number, targetSubfolder: string) {
     /// Moves media files references to which were detected to the /_m subfolder.
     const targetPath = rootPath + mediaSubfolder + targetSubfolder
     for (let fN of mediaFiles) {
-        deleteIfExists(targetPath + fN.substring(lenPrefix))
-        sourceFile.copyTo(targetPath + fN.substring(lenPrefix))
-        sourceFile.delete()
+        deleteIfExists(targetPath + fN)
+        await fs.rename(fN, targetPath + fN)
     }
 }
 
-function moveDocs(incomingFiles: Ingested[], sourceSubfolder: string, targetSubfolder: string) {
+async function moveDocs(incomingFiles: Ingested[], sourceSubfolder: string, targetSubfolder: string) {
     /// Updates the document stockpile on disk according to the list of ingested files.
 
     const targetPrefix = rootPath + targetSubfolder
     const targetMediaPrefix = rootPath + mediaSubfolder
-    for (iFile of incomingFiles) {
+    for (let iFile of incomingFiles) {
         if(iFile.tp == `CreateUpdate`) {
+            const iDoc = iFile as CreateUpdateDoc;
             const nameId = iFile.fullPath.replace(` `, ``)
-            const sourceHtml = File(rootPath + sourceSubfolder + iFile.fullPath + ".html")
+            const sourceN = (rootPath + sourceSubfolder + iFile.fullPath + ".html")
+            const sourceHtml = await readFile(sourceN)
 
-            const fTarget = File(targetPrefix + nameId + `.html`)
-            if (fTarget.exists()) { fTarget.delete(); }
-            fTarget.parentFile.mkdirs()
-            fTarget.writeText(iFile.content)
+            const fTarget = (targetPrefix + nameId + `.html`)
+            await deleteIfExists(fTarget)
+            await fs.mkdir(fTarget)
+            await writeText(fTarget, iDoc.cont)
 
-            const fStyleTarget = File(targetMediaPrefix + nameId + `.css`)
-            if (fStyleTarget.exists()) { fStyleTarget.delete() }
-            if (iFile.styleContent != ``) {
-                fStyleTarget.parentFile.mkdirs()
-                fStyleTarget.writeText(iFile.styleContent)
+            if (iDoc.jsModules.length > 0) {
+                const depsTarget = targetPrefix + nameId + `.deps`;
+                await deleteIfExists(depsTarget)
+                writeText(depsTarget, iDoc.jsModules.join(`\n`))
             }
-
-            if (iFile.jsModules.isNotEmpty()) {
-                const depsTarget = File(targetPrefix + nameId + `.deps`)
-                if (depsTarget.exists()) { depsTarget.delete() }
-
-                depsTarget.writeText(iFile.jsModules.joinToString(`\n`))
-            }
-
-            if (sourceHtml.exists()) { sourceHtml.delete() }
+            await deleteIfExists(sourceN)
         } else { // "Delete"
-            deleteIfExists(targetPrefix + iFile.fullPath.replace(` `, ``) + `.html`)
-            deleteIfExists(targetPrefix + iFile.fullPath.replace(` `, ``) + `.deps`)
-            deleteIfExists(rootPath + ingestSubfolder + iFile.fullPath + `.html`)
+            const iDel = iFile as DeleteDoc;
+            deleteIfExists(targetPrefix + iDel.fullPath.replace(` `, ``) + `.html`)
+            deleteIfExists(targetPrefix + iDel.fullPath.replace(` `, ``) + `.deps`)
+            deleteIfExists(rootPath + ingestSubfolder + iDel.fullPath + `.html`)
         }
     }
 }
 
 
-function readCachedDocs(cache: DocCache) {
+async function readCachedDocs(cache: DocCache) {
     const docsDirN = rootPath + docsSubfolder
-    const docsDir = File(docsDirN)
     const prefixLength = docsDirN.length
-    const arrFiles: FileTreeWalk = docsDir.walk()
-    const emptyList = mutableListOf<String>()
 
-    const fileList = arrFiles.filter (file => file.isFile && file.name.endsWith(`.html`)
-                                             && file.name.length > 5 && file.length() < 2000000)
-                           .toList();
+    const allFiles = await fs.readdir(docsDirN);
+    const fileList = allFiles.filter((file: string) => file.endsWith(`.html`)
+                                             && file.length > 5);
 
-    for (let it of fileList) {
-        const address = it.path.substring(prefixLength, it.path.length - 5) // -5 for the `.html`
-        const depsFile = File(docsDirN + address + `.deps`)
-        const deps = (depsFile.exists()) ? depsFile.readText().split(`\n`) : [];
+    for (let fN of fileList) {
+        const fileStats = await fs.stat(docsDirN + fN)
+        const fileContent = await readFile(docsDirN + fN)
 
-        const fileContent = await readFile(docsDir + it)
-        const doc = new Document(fileContent, deps, address, fileModified)
-        cache.addDocument(address, doc)
+        const nameWithoutExt = fN.substring(prefixLength, fN.length - 5) // -5 for the `.html`
+        const depsFile = (docsDirN + nameWithoutExt + `.deps`)
+        const deps = (await readFile(depsFile)).split(`\n`);
+        const doc = new Document(fileContent, deps, nameWithoutExt, fileStats.mtime)
+        cache.addDocument(docsSubfolder + nameWithoutExt, doc)
     }
 }
 
@@ -728,24 +727,23 @@ async function readCachedCore(cache: DocCache) {
     if (fileCss !== ``) { cache.coreCss = fileCss }
 }
 
-function readCachedScripts(docCache: DocCache) {
-    const intakeDirN = rootPath + scriptsSubfolder
-    const intakeDir = File(intakeDirN)
-    const prefixLength = intakeDirN.length
-    const arrFiles: FileTreeWalk = intakeDir.walk()
+async function readCachedScripts(docCache: DocCache) {
+    const scriptDirN = rootPath + scriptsSubfolder
+    const prefixLength = scriptDirN.length
 
-    const fileList = arrFiles.filter(file => file.isFile && file.name.endsWith(`.js`)
-                                    && file.name.length > 5 && file.length() < 500000)
-                           .toList();
-    for(let it of fileList) {
-        const shortFileName = it.path.substring(prefixLength, it.path.length - 3) // -3 for the ".js"
-        docCache.addModule(shortFileName)
+    const allFiles = (await fs.readDir(scriptDirN)).filter((fN: string) => fN.endsWith(`.js`)
+                                    && fN.length > 5);
+    for(let fN of allFiles) {
+        const shortFileName = fN.substring(0, fN.length - 3) // -3 for the ".js"
+        const fileStats = await fs.stat(scriptDirN + fN)
+        if (fileStats.size < 2000000)  {
+            docCache.addModule(shortFileName)
+        }
     }
 }
 
 async function moveFile(sourcePath: string, targetPath: string, fNShort: string)  {
-    fs.move(sourcePath + fNShort, targetPath + fNShort, err => {
-    });
+    fs.rename(sourcePath + fNShort, targetPath + fNShort);
 
 //~    const fileContent = await readFile(sourcePath + fNShort)
 //~    if (fileContent !== ``) {
@@ -864,14 +862,6 @@ function deleteIfExists(fN: string) {
     fs.rm(fN, {force: true});
 }
 
-async function foo() {
-    await fs.readdir(path, (err: any, files: string[]) => {
-        for (let file of files) {
-
-        }
-    })
-}
-
 async function readFile(fN: string): Promise<string> {
     try {
         const contents = await readFile(fN);
@@ -879,6 +869,16 @@ async function readFile(fN: string): Promise<string> {
     } catch(err) {
         return ``
     }
+}
+
+async function createDir(dirN: string): Promise<boolean> {
+    let result = true
+    await fs.mkdir(dirN, { recursive: true }, (err: any) => { if (err) result = false; });
+    return result;
+}
+
+async function writeText(fN: string, text: string) {
+    await fs.writeFile(fN, text)
 }
 
 //}}}
