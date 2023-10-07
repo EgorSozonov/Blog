@@ -1,12 +1,12 @@
 .RECIPEPREFIX = /
 
-ifndef VERBOSE
+#ifndef VERBOSE
 #.SILENT: # Silent mode unless you run it like "make all VERBOSE=1"
-endif
+#endif
 
 .PHONY: all clean help
 
-TSFLAGS=--esModuleInterop true --module commonjs 
+TSFLAGS=--strict true --esModuleInterop true --module es2020
 BIN=blog
 
 SOURCE=$(wildcard src/*.ts)
@@ -22,20 +22,21 @@ install:
 build: | _bin ## Build the project
 / tsc --outdir _bin src/blog.ts
 
-run: 
-/ node .
+run:
+/ node _bin/$(BIN).js
 
-_bin:
-/ mkdir p _bin
+binFolder:
+/ mkdir -p _bin
 
 clean: ## Delete cached build results
 / rm -rf _bin
 
-_bintest: | _bin
+testFolder: | binFolder
 / mkdir -p _bin/test
 
-test: | _bintest ## Run unit tests
-/ rm _bin/test/test.js
+test: | testFolder ## Run unit tests
+#/ rm _bin/test/test.js
+/ echo 'testing'
 / tsc --outdir _bin/test $(TSFLAGS) test/test.ts
 / node _bin/test/test.js
 

@@ -1,8 +1,5 @@
-
-
-
 Events:
-1. Turn on with existing cache: sync-ingest and sync-scan
+1. Turn on application existing cache: sync-ingest and sync-scan
 2. update a core js module
 3. Update the core css file
 4. update a media file/document js file
