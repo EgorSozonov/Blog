@@ -36,6 +36,12 @@ type Cleanup = {
 //}}}
 //{{{ Blog and its events
 
+
+async function start(): Promise<Blog> {
+    /// App startup. Ingest core files & docs, then read the docs into doc cache,
+    /// create deps list, then start serving
+}
+
 class Blog {
     constructor(private docCache: DocCache,
                 private navTopic: NavTree,
@@ -56,10 +62,6 @@ class Blog {
     }
 
 
-    start() {
-        /// App startup. Ingest core files & docs, then read the docs into doc cache,
-        /// create deps list, then start serving
-    }
 
     updateCoreJs() {
         /// regenerate html files depending on this module, update them in the doc cache,
@@ -553,7 +555,14 @@ function getHtmlBodyStyle(html: string, ingestPath: string, fileSubpath: string,
 }
 
 //}}}
-//{{{ File data source
+//{{{ File store
+interface FileSys {
+    saveFile(fN: string, cont: string): Promise<boolean>;
+    deleteIfExists(fN: string): Promise<boolean>;
+    getNamesWithPrefix(
+}
+//}}}
+//{{{ Document ingestion
 
 type IngestedCore = {
     js: string;
