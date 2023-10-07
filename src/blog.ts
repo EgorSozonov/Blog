@@ -18,7 +18,7 @@ type DocName = {
 
 type ModDeps = {
    /// A core JS module
-   version: number;
+   fullName: string; // name with version
    dependents: DocName[]; // names like "programming/foo"
 }
 
@@ -27,6 +27,10 @@ type Cleanup = {
    docN: DocName[];
    fN: string;
    when: Date;
+}
+
+type CoreFile = {
+   version: number;
 }
 
 //}}}
@@ -70,8 +74,32 @@ class Blog {
       // process ingestion
    }
 
-   async ingestCore() {
-      if (this.fs.dirExists(staticDir +
+   async ingestCore(): Promise<boolean> {
+      /// Processes the core ingest folder. Returns true iff it had any core files to ingest
+      /// (which implies that all HTML in the Blog needs to be regenerated)
+      const dir = getCoreDir();
+      if (!(await this.fs.dirExists(dir))) {
+         return;
+      }
+      const fileList = await this.fs.listFiles(dir);
+      for (let inFile of fileList) {
+         if (isFixedCore(inFile.name)) {
+            this.moveFixedCore(dir, inFile)
+         }
+      }
+
+   }
+
+   private async moveFixedCore(dir: string, inFile: FileInfo): Promise<number> {
+      /// Moves a fixed core file (i.e. not an additional script module) and returns its version
+      const dir = getCoreDir();
+      const targetDir = staticDir + coreSubfolder;
+      const newVersion
+
+   }
+
+   private async processCore(fN: string) {
+
    }
 
 
@@ -105,14 +133,14 @@ class Blog {
 
    }
 
-   private updateDoc(doc: Document)  {
+   private updateDoc(doc: Document)   {
       /// Rewrite just this one document, move any new media files and add the discarded ones
       /// ones to cleanup, update it in the doc cache, update all deps lists
 
 
    }
 
-   deleteDoc(name: DocName)  {
+   deleteDoc(name: DocName)   {
       /// rewrite all html files, remove form doc cache, update all the deps lists, add
       /// all media files to cleanup list, delete the html file
 
@@ -123,9 +151,11 @@ class Blog {
 //}}}
 //{{{ Constants
 
-const appSuburl = `blog/`
-const coreSubfolder = `_c/`
-const updateFreq = 300 // seconds before the cache gets rescanned
+const appSuburl = `blog/`;
+const coreSubfolder = `_c/`;
+const updateFreq = 300; // seconds before the cache gets rescanned
+const coreFiles = [`notFound.png`, `notFound.html`, `core.css`, `core.html`, `core.js`,
+                            `favicon.ico`, `footer.html`, `no.png`, `yes.png`, `termsOfUse.html`];
 
 //}}}
 //{{{ Document cache
@@ -139,24 +169,6 @@ class Document {
       wasAddedDb = false;
    }
 }
-
-
-class CreateUpdateDoc {
-   readonly tp: string;
-   constructor(readonly fullPath: string, readonly cont: string, readonly style: string,
-            readonly modified: Date, readonly jsModules: string[]) {
-      tp = `CreateUpdate`
-   }
-}
-
-class DeleteDoc {
-   readonly tp: string;
-   constructor(readonly fullPath: string)  {
-      tp = `Delete`
-   }
-}
-
-type Ingested = CreateUpdateDoc | DeleteDoc
 
 function docOfIngested(ingested: CreateUpdateDoc): Document {
    return new Document(ingested.cont, ingested.jsModules, ingested.fullPath, ingested.modified);
@@ -208,8 +220,8 @@ class DocCache {
                const cu: CreateUpdateDoc = iD as CreateUpdateDoc;
                const key = cu.fullPath.toLowerCase().replace(` `, ``)
                cache[key] = new Document(cu.cont, cu.jsModules, cu.style.length > 0,
-                                   cu.fullPath.replace(` `, ``),
-                                   cu.modified);
+                                    cu.fullPath.replace(` `, ``),
+                                    cu.modified);
             } else {
                const del: DeleteDoc = iD as DeleteDoc;
                const key = del.fullPath.toLowerCase().replace(` `, ``)
@@ -257,7 +269,7 @@ class NavTree {
    constructor(name: string, children: NavTree[]) {
    }
 
-   createBreadCrumbs(subAddress: string): number[]  {
+   createBreadcrumbsTopical(subAddress: string): number[]   {
       /// Make breadcrumbs that trace the way to this file from the root.
       /// Attempts to follow the spine, but this doesn't work for temporal nav trees,
       /// so in case of an element not found it switches to the slow version
@@ -317,7 +329,7 @@ class NavTree {
       return []
    }
 
-   toJson(): string  {
+   toJson(): string   {
       const st: [NavTree, number][] = []
       if (this.children.length === 0) {
          return ``
@@ -414,7 +426,7 @@ class NavTree {
       const pagesByDate = pages.sort((x, y) => x[1] - y[1]);
       const st = []
       const root = new NavTree(``, [])
-      for (let pag of pagesByDate)  {
+      for (let pag of pagesByDate)   {
          const yearName = pag[1].year.toString()
          const monthName = nameOf(page.second.month)
 
@@ -458,7 +470,7 @@ function rewriteLinks(cont: string, ingestPath: string, fileSubpath: string): st
    const indLastSlash = fileSubpath.lastIndexOf(`/`)
    const fileSubfolder = (indLastSlash < 1)
       ? `` : fileSubpath.substring(0, indLastSlash).pathize();
-   while (true)  {
+   while (true)   {
       currInd = content.indexOf(`src="`, prevInd)
       if (currInd === -1) {
          result += content.substring(prevInd)
@@ -544,7 +556,7 @@ function rewriteScriptImports(script: string, subfolder: string): string {
       } else if (tail.startsWidth(`./`)) {
          spl[j] = spl[j].substring(0, indFrom + 1) + scriptPrefix + subfolder +
                spl[j].substring(indFrom + 3) // +3 for `"./`
-      } else  {
+      } else   {
          return ``
       }
    }
@@ -553,7 +565,7 @@ function rewriteScriptImports(script: string, subfolder: string): string {
 
 
 function getHtmlBodyStyle(html: string, ingestPath: string, fileSubpath: string, mediaFiles: Set<String>)
-     : [string, string] {
+      : [string, string] {
    const indStart = html.indexOf(`<body>`)
    const indEnd = html.lastIndexOf(`</body>`)
    if (indStart < 0 || indEnd < 0 || (indEnd - indStart) < 7) {
@@ -572,10 +584,52 @@ function getHtmlBodyStyle(html: string, ingestPath: string, fileSubpath: string,
 //{{{ File store
 
 interface FileSys {
-   saveFile(fN: string, cont: string): Promise<boolean>;
-   deleteIfExists(fN: string): Promise<boolean>;
-   getNamesWithPrefix(
+   dirExists(dir: string): Promise<boolean>;
+   listFiles(dir: string): Promise<string[]>;
+   listDirs(dir: string): Promise<string[]>;
+   readTextFile(dir: string, fN: string): string;
+   saveOverwriteFile(dir: string, fN: string, cont: string): Promise<boolean>;
+
+   /// Precondition: source file and target dir exist. If target file exists, it will be overwritten
+   moveFile(dir: string, fN: string, targetDir: string): Promise<boolean>;
+
+   /// Precondition: source file and target dir exist. Returns the new version of the file,
+   /// or 0 if it didn't previously exist
+   moveFileToNewVersion(dir: string, fN: string, targetDir: string): Promise<string>;
+   deleteIfExists(dir: string, fN: string): Promise<boolean>;
+   getNamesWithPrefix(dir: string, prefix: string): Promise<string[]>;
 }
+
+
+type FileInfo = {
+   name: string;
+   modified: Date;
+}
+
+
+function deleteIfExists(fN: string) {
+   fs.rm(fN, {force: true});
+}
+
+async function readFile(fN: string): Promise<string> {
+   try {
+      const contents = await readFile(fN);
+      return contents;
+   } catch(err) {
+      return ``
+   }
+}
+
+async function createDir(dirN: string): Promise<boolean> {
+   let result = true
+   await fs.mkdir(dirN, { recursive: true }, (err: any) => { if (err) result = false; });
+   return result;
+}
+
+async function writeText(fN: string, text: string) {
+   await fs.writeFile(fN, text)
+}
+
 
 //}}}
 //{{{ Document ingestion
@@ -675,7 +729,7 @@ async function ingestDoc(file: Stats, ingestPath: string, mediaFiles: Set<string
    /// media files and script modules, rewrites the links to them, and decides whether this is an
    /// update/new doc or a delete.
    const fileContent = await readFile(file)
-   if (fileContent === ``)  {
+   if (fileContent === ``)   {
       return null
    }
    const lastModified = file.lastModified()
@@ -692,83 +746,6 @@ async function ingestDoc(file: Stats, ingestPath: string, mediaFiles: Set<string
 
    return new CreateUpdateDoc(fileSubpath, content, styleContent, new Date(file.mtime), jsModuleNames)
 }
-
-async function ingestScripts(scriptNames: string[], docCache: DocCache, isGlobal: boolean) {
-   /// Ingests script module files, determines their names, and puts them into the cache folder.
-   const targetPath = staticDir + scriptsSubfolder
-
-   const success = await createDir(targetPath)
-   if (!success)  {
-      return
-   }
-
-   const prefixLength = staticDir.length +
-      (isGlobal ? ingestCoreSubfolder.length : ingestSubfolder.length);
-   for (let fN of scriptNames) {
-      const sourceFile = staticDir + fN
-      const scriptContent = await readFile(sourceFile)
-      const subfolder = fN.substring(prefixLength, fN.length - sourceFile.length)
-      const rewrittenContent = rewriteScriptImports(scriptContent, subfolder)
-
-      const modId = (isGlobal) ?
-         (globalsSubfolder + fN.substring(prefixLength, fN.length - 3)) // -3 for ".js"
-         : (subfolder + sourceFile.substring(0, sourceFile.length - 3));
-
-      docCache.addModule(modId)
-      const targetFile = (targetPath + modId + `.js`)
-
-      if (subfolder.length > 0) {
-         await createDir(targetPath + subfolder)
-      } else {
-         await createDir(targetPath + globalsSubfolder)
-      }
-
-      await writeText(targetFile, rewrittenContent)
-      await fs.rm(sourceFile)
-   }
-}
-
-async function moveMediaFiles(mediaFiles: Set<string>, lenPrefix: number, targetSubfolder: string) {
-   /// Moves media files references to which were detected to the /_m subfolder.
-   const targetPath = staticDir + mediaSubfolder + targetSubfolder
-   for (let fN of mediaFiles) {
-      deleteIfExists(targetPath + fN)
-      await fs.rename(fN, targetPath + fN)
-   }
-}
-
-async function moveDocs(incomingFiles: Ingested[], sourceSubfolder: string, targetSubfolder: string) {
-   /// Updates the document stockpile on disk according to the list of ingested files.
-
-   const targetPrefix = staticDir + targetSubfolder
-   const targetMediaPrefix = staticDir + mediaSubfolder
-   for (let iFile of incomingFiles) {
-      if(iFile.tp == `CreateUpdate`) {
-         const iDoc = iFile as CreateUpdateDoc;
-         const nameId = iFile.fullPath.replace(` `, ``)
-         const sourceN = (staticDir + sourceSubfolder + iFile.fullPath + ".html")
-         const sourceHtml = await readFile(sourceN)
-
-         const fTarget = (targetPrefix + nameId + `.html`)
-         await deleteIfExists(fTarget)
-         await fs.mkdir(fTarget)
-         await writeText(fTarget, iDoc.cont)
-
-         if (iDoc.jsModules.length > 0) {
-            const depsTarget = targetPrefix + nameId + `.deps`;
-            await deleteIfExists(depsTarget)
-            writeText(depsTarget, iDoc.jsModules.join(`\n`))
-         }
-         await deleteIfExists(sourceN)
-      } else { // "Delete"
-         const iDel = iFile as DeleteDoc;
-         deleteIfExists(targetPrefix + iDel.fullPath.replace(` `, ``) + `.html`)
-         deleteIfExists(targetPrefix + iDel.fullPath.replace(` `, ``) + `.deps`)
-         deleteIfExists(staticDir + ingestSubfolder + iDel.fullPath + `.html`)
-      }
-   }
-}
-
 
 async function readCachedDocs(cache: DocCache) {
    const docsDirN = staticDir + docsSubfolder
@@ -830,24 +807,10 @@ async function readCachedScripts(docCache: DocCache) {
    for(let fN of allFiles) {
       const shortFileName = fN.substring(0, fN.length - 3) // -3 for the ".js"
       const fileStats = await fs.stat(scriptDirN + fN)
-      if (fileStats.size < 2000000)  {
+      if (fileStats.size < 2000000)   {
          docCache.addModule(shortFileName)
       }
    }
-}
-
-async function moveFile(sourcePath: string, targetPath: string, fNShort: string)  {
-   fs.rename(sourcePath + fNShort, targetPath + fNShort);
-
-//~   const fileContent = await readFile(sourcePath + fNShort)
-//~   if (fileContent !== ``) {
-//~      const fNTarget = (targetPath + fNShort)
-//~      deleteIfExists(targetPath + fNShort)
-//~      fNTarget.parentFile.mkdirs()
-//~      fNTarget.writeText(fNTarget)
-//~      file.delete()
-//~   }
-//~   return result
 }
 
 //}}}
@@ -946,33 +909,17 @@ app.listen( port, () => {
 //}}}
 //{{{ Utils
 
-type Triple<T, U, V> = {
-   f1: T;
-   f2: U;
-   f3: V;
-}
-
-function deleteIfExists(fN: string) {
-   fs.rm(fN, {force: true});
-}
-
-async function readFile(fN: string): Promise<string> {
-   try {
-      const contents = await readFile(fN);
-      return contents;
-   } catch(err) {
-      return ``
+function isFixedCore(fN: string): boolean  {
+   for (let i = 0; i < coreFiles.length; i++) {
+      if (coreFiles[i] === fN) {
+         return true
+      }
    }
+   return false;
 }
 
-async function createDir(dirN: string): Promise<boolean> {
-   let result = true
-   await fs.mkdir(dirN, { recursive: true }, (err: any) => { if (err) result = false; });
-   return result;
-}
-
-async function writeText(fN: string, text: string) {
-   await fs.writeFile(fN, text)
+private getCoreDir(): string  {
+   return ingestDir + coreSubfolder;
 }
 
 //}}}
