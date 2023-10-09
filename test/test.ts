@@ -4,7 +4,8 @@ import assert from 'node:assert';
 interface FileSys {
    dirExists(dir: string): Promise<boolean>;
    listFiles(dir: string): Promise<FileInfo[]>;
-   listDirs(dir: string): Promise<string[]>;
+   listDirs(dir: string): Promise<string[]>; 
+   readTextFile(dir: string, fN: string): string;
    saveOverwriteFile(dir: string, fN: string, cont: string): Promise<boolean>;
    moveFile(dir: string, fN: string, targetDir: string): Promise<boolean>;
    moveFileToNewVersion(dir: string, fN: string, targetDir: string): Promise<string>;
@@ -16,7 +17,7 @@ interface FileSys {
 
 class MockFileSys implements FileSys {
    private fs: Map<string, MockFile[]>;
-
+   
    constructor() {
       this.fs = new Map<string, MockFile[]>();
    }
@@ -28,22 +29,22 @@ class MockFileSys implements FileSys {
       const existingFiles = this.fs.get(dir)!!;
       const filtered = existingFiles.filter((x: MockFile) => x.name.startsWith(prefix))
                               .map((x: MockFile) => x.name);
-      return filtered ? filtered : [];
+      return filtered ? filtered : []; 
    }
-
-
+   
+   
    async dirExists(dir: string): Promise<boolean> {
-      return this.fs.has(dir)
+      return this.fs.has(dir) 
    }
-
+   
    async listFiles(dir: string): Promise<FileInfo[]> {
       if (!this.fs.has(dir)) {
-         return []
+         return [] 
       }
       const files = this.fs.get(dir)!!;
       return files.map((x: MockFile): FileInfo => {return { name: x.name, modified: x.modified }})
    }
-
+   
    async listDirs(dir: string): Promise<string[]> {
       const dirWithSl = (dir.endsWith(`/`)) ? dir : dir + `/`;
       const subfolders = Array.from(this.fs.keys()).filter((x: string) => x.startsWith(dirWithSl));
@@ -54,7 +55,7 @@ class MockFileSys implements FileSys {
    }
 
    async saveOverwriteFile(dir: string, fN: string, cont: string): Promise<boolean> {
-      const newFile: MockFile = { name: fN, cont: cont, modified: new Date() };
+      const newFile: MockFile = { name: fN, cont: cont, modified: new Date() }; 
       if(this.fs.has(dir)) {
          const existingFiles = this.fs.get(dir)!!;
          const indexExisting = existingFiles.findIndex(x => x.name == fN);
@@ -63,55 +64,55 @@ class MockFileSys implements FileSys {
          } else {
             existingFiles[indexExisting] = newFile
          }
-      } else {
+      } else {    
          this.fs.set(dir, [newFile])
       }
-      return true;
+      return true; 
    }
-
+   
    async moveFile(dir: string, fN: string, targetDir: string): Promise<boolean> {
       const sourceFiles = this.fs.get(dir)!!;
       const indexSource = sourceFiles.findIndex(x => x.name == fN);
-      const targetFiles = this.fs.get(targetDir)!!;
+      const targetFiles = this.fs.get(targetDir)!!; 
       const sourceFile = sourceFiles[indexSource];
-
+      
       const indexTarget = targetFiles.findIndex(x => x.name == fN);
       if (indexTarget === -1)  {
          targetFiles.push(sourceFile);
       } else {
          targetFiles[indexTarget] = sourceFile;
       }
-
+      
       sourceFiles.splice(indexSource, 1)
-      return true;
+      return true; 
    }
-
+   
    async moveFileToNewVersion(dir: string, fN: string, targetDir: string): Promise<string> {
       const sourceFiles = this.fs.get(dir)!!;
       const indexSource = sourceFiles.findIndex(x => x.name == fN);
-      const targetFiles = this.fs.get(targetDir)!!;
+      const targetFiles = this.fs.get(targetDir)!!; 
       const sourceFile = sourceFiles[indexSource];
-
+      
       const existingWithThisPrefix = await this.getNamesWithPrefix(targetDir, shaveOffExtension(fN));
       let newName = fN;
-
+         
       if (existingWithThisPrefix.length === 0)  {
          targetFiles.push(sourceFile);
       } else {
-         const maxExistingVersion = getMaxVersion(existingWithThisPrefix);
+         const maxExistingVersion = getMaxVersion(existingWithThisPrefix); 
          const indLastDot = fN.lastIndexOf(`.`);
-         newName = fN.substring(0, indLastDot) + `-` + (maxExistingVersion + 1)
+         newName = fN.substring(0, indLastDot) + `-` + (maxExistingVersion + 1) 
                    + fN.substring(indLastDot);
-
-         targetFiles.push({
+         
+         targetFiles.push({ 
             name: newName, cont: sourceFile.cont, modified: sourceFile.modified
          });
       }
-
+      
       sourceFiles.splice(indexSource, 1)
-      return newName;
+      return newName; 
    }
-
+   
    async deleteIfExists(dir: string, fN: string): Promise<boolean> {
       if(!this.fs.has(dir)) {
          return true;
@@ -123,7 +124,7 @@ class MockFileSys implements FileSys {
       }
       return true;
    }
-
+   
 }
 
 //}}}
@@ -132,7 +133,7 @@ class MockFileSys implements FileSys {
 async function testSaveFile() {
    const fs = new MockFileSys()
    const resSave = await fs.saveOverwriteFile(`a/b`, `myFile.txt`, `An ode to joy`)
-   assert(resSave === true, `testSaveFile`)
+   assert(resSave === true, `testSaveFile`) 
 }
 
 
@@ -156,10 +157,10 @@ async function testIngestCore() {
    await fs.saveOverwriteFile(`/var/www/blog/a.b`, `myFile-2.txt`, `An ode to joy`)
    await fs.saveOverwriteFile(`/var/www/blog/_c`, `core.css`, `Styles`)
    await fs.saveOverwriteFile(`/var/www/blog/_c`, `graph.js`, `Flexible core script`)
-
+   
    const blog = new Blog(fs);
    blog.ingestCore()
-
+   const 
 }
 
 //}}}
@@ -171,7 +172,7 @@ const ingestDir = `/var/www/blog`
 const appSuburl = `blog/`;
 const coreSubfolder = `_c/`;
 const updateFreq = 300; // seconds before the cache gets rescanned
-const coreFiles = [`notFound.png`, `notFound.html`, `core.css`, `core.html`, `core.js`,
+const coreFiles = [`notFound.png`, `notFound.html`, `core.css`, `core.html`, `core.js`, 
                             `favicon.ico`, `footer.html`, `no.png`, `yes.png`, `termsOfUse.html`];
 //}}}
 //{{{ Utils
@@ -211,11 +212,11 @@ function getMaxVersion(filenames: string[]): number {
 class Blog {
    constructor(private fs: FileSys) {
    }
-
+   
    async ingestCore(): Promise<boolean> {
-      /// Processes the core ingest folder. Returns true iff it had any core files to ingest
+      /// Processes the core ingest folder. Returns true iff it had any core files to ingest 
       /// (which implies that all HTML in the Blog needs to be regenerated)
-      const dir = getCoreDir();
+      const dir = getCoreDir(); 
       if (!(await this.fs.dirExists(dir))) {
          return false;
       }
@@ -227,7 +228,7 @@ class Blog {
       }
       return true;
    }
-
+   
    private async moveFixedCore(dir: string, inFile: FileInfo): Promise<string> {
       /// Moves a fixed core file (i.e. not an additional script module) and returns its version
       const sourceDir = getCoreDir();
@@ -292,7 +293,7 @@ async function runTest(testFun: () => void, res: TestResults) {
       await testFun()
    } catch (err: unknown) {
       if (err instanceof Error) {
-         console.dir(err)
+         console.dir(err)         
       }
       res.countFailed += 1
    }
@@ -306,7 +307,7 @@ async function main() {
    await runTest(testSaveFile, results)
    await runTest(testFilePrefixes, results)
    await runTest(testMaxVersion, results)
-
+   
    console.dir(results)
 }
 
