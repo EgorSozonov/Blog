@@ -40,6 +40,12 @@ test: | testFolder ## Run unit tests
 / tsc --outdir _bin/test $(TSFLAGS) test/test.ts
 / node _bin/test/test.js
 
+
+
+#g++ -g3 --std=c++23 -I/usr/local/include/oatpp-1.3.0/oatpp -o _bin/cache/blog.o -c src/main.cpp
+
+#g++ -rdynamic "_bin/cache/blog.o" -o oaplay /usr/local/lib/oatpp-1.3.0/liboatpp-test.a /usr/local/lib/oatpp-1.3.0/liboatpp.a -latomic 
+
 help: ## Show this help
 / @egrep -h '\s##\s' $(MAKEFILE_LIST) | sort | awk 'BEGIN {print "-- Help --";print ""; FS = ":.*?## "}; {printf "\033[32m%-10s\033[0m %s\n", $$1, $$2}'
 # MAKEFILE_LIST lists the contents of this present file
