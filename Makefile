@@ -31,14 +31,12 @@ binFolder:
 clean: ## Delete cached build results
 / rm -rf _bin
 
-testFolder: | binFolder
+_bin/test: | _bin
 / mkdir -p _bin/test
 
-test: | testFolder ## Run unit tests
-#/ rm _bin/test/test.js
+test: | _bin/test ## Run unit tests
 / echo 'testing'
-/ tsc --outdir _bin/test $(TSFLAGS) test/test.ts
-/ node _bin/test/test.js
+/ g++ --std=c++23 -o _bin/test/test  test/test.cpp
 
 
 
