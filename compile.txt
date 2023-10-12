@@ -1,0 +1,1 @@
+g++ --std=c++23 -Wfatal-errors -o _bin/test/test  test/test.cpp

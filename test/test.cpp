@@ -85,6 +85,49 @@ public:
 //~   unique_ptr<Arena> a = unique_ptr<Arena>(aPtr);
 
 //}}}
+//{{{ Vector
+
+template<typename T>
+test/test.cppclass VecChunk<T> {
+public:
+   Int len;
+   Int cap;
+   T cont[2];
+}
+
+template<typename T>
+class Vec<T> {
+private:
+   VecChunk<T>* cont;
+   
+public:
+   T& operator[](Int index) {
+      return cont->cont[index];
+   }
+   
+   static Vec<T> create()  {
+      VecChunk<T>* newCont = (VecChunk<T>*)malloc(sizeof(VecChunk) + 4*sizeof(T));
+      newCont->len = 0;
+      newCont->cap = 4;
+   }
+   
+   void push(T newElem) {
+      cont->cont[cont->len] = newElem;
+      ++cont->len;
+      if (cont->len == cont->cap) {
+         VecChunk<T>* newCont = (VecChunk<T>*)malloc(sizeof(VecChunk) + 2*cont->cap*sizeof(T));
+         newCont->len = cont->len;
+         newCont->cap = 2*cont->cap;
+         cont = newCont; 
+      }
+   }
+   
+   Int indexOf(UnaryPredicate pred) {
+      
+   }
+}
+
+//}}}
 //{{{ Utils
 
 string* shaveOffExtension(const string& fN) {
