@@ -4,14 +4,14 @@
 #include <array>
 #include <map>
 #include <algorithm>
-
+#include <functional>
+#include "test.h"
 using namespace std;
 
-#define Ts time_t
 #define CHUNK_QUANT 32768
 #define null nullptr
-#define Int int32_t
 
+string getCoreDir();
 //{{{ Arena
 
 class Arena final {
@@ -88,125 +88,175 @@ public:
 //{{{ Vector
 
 template<typename T>
-test/test.cppclass VecChunk<T> {
+class VecChunk final {
 public:
-   Int len;
+   Int size;
    Int cap;
+   Arena* a;
    T cont[2];
-}
+};
 
 template<typename T>
-class Vec<T> {
+class Vec final {
 private:
    VecChunk<T>* cont;
-   
+
 public:
    T& operator[](Int index) {
       return cont->cont[index];
    }
-   
-   static Vec<T> create()  {
-      VecChunk<T>* newCont = (VecChunk<T>*)malloc(sizeof(VecChunk) + 4*sizeof(T));
+
+   static Vec<T> create(Arena* a) {
+      VecChunk<T>* newCont = static_cast<VecChunk<T>*>(a->allocate(
+            sizeof(VecChunk<T>) + 2*sizeof(T)));
       newCont->len = 0;
       newCont->cap = 4;
+      newCont->a = a;
+      Vec<T> result;
+      result.cont = newCont;
+      return result;
    }
    
+   static Vec<T> createWithSize(Arena* a, Int size) {
+      VecChunk<T>* newCont = static_cast<VecChunk<T>*>(a->allocate(
+            sizeof(VecChunk<T>) + (size - 2)*sizeof(T)));
+      newCont->len = 0;
+      newCont->cap = size;
+      newCont->a = a;
+      Vec<T> result;
+      result.cont = newCont;
+      return result;
+   }
+
    void push(T newElem) {
       cont->cont[cont->len] = newElem;
       ++cont->len;
       if (cont->len == cont->cap) {
-         VecChunk<T>* newCont = (VecChunk<T>*)malloc(sizeof(VecChunk) + 2*cont->cap*sizeof(T));
-         newCont->len = cont->len;
+         cout << "allocatin'!\n";
+         VecChunk<T>* newCont = static_cast<VecChunk<T>*>( 
+               cont->a->allocate(sizeof(VecChunk<T>) + (2*cont->cap - 2)*sizeof(T))
+         );
+         memcpy(newCont->cont, cont->cont, cont->len*sizeof(T));
+         newCont->size = cont->size;
          newCont->cap = 2*cont->cap;
-         cont = newCont; 
+         cont = newCont;
+      }
+   }
+
+   Int size() const {
+      return cont->size;
+   }
+
+   Int findIf(function<bool(T)> pred) const {
+      if (cont->size == 0) {
+         return -1;
+      }
+      for (Int j = 0; j < cont->size; j++) {
+         if (pred(cont->cont[j])) {
+            return j;
+         }
+      }
+      return -1;
+   }
+
+
+   Int findIfReverse(function<bool(T)> pred) const {
+      if (cont->size == 0) {
+         return -1;
+      }
+      for (Int j = cont->size - 1; j > -1; j--) {
+         if (pred(cont->cont[j])) {
+            return j;
+         }
+      }
+      return -1;
+   }
+   
+   template<typename U>
+   Vec<U> transform(function<U(const T&)> transformer) {
+      Vec<U> result = Vec<U>::createWithSize(this->cont.len);
+      const Int len = this->cont.len;
+      T* source = this->cont.cont;
+      U* target = result->cont.cont;
+      for (Int i = 0; i < len; i++) {
+         target[i] = transformer(source[i]);
       }
    }
    
-   Int indexOf(UnaryPredicate pred) {
-      
+   T* begin() {
+      return &cont->cont;
    }
-}
+   
+   T* end() {
+      return cont->cont + cont->cont.len;
+   }
+   
+private:
+   Vec<T> createWithSize(Int size) {
+      VecChunk<T>* newCont = (VecChunk<T>*)malloc(sizeof(VecChunk<T>) + (size - 2)*sizeof(T));
+      newCont->len = 0;
+      newCont->cap = size;
+      newCont->a = cont.a;
+      Vec<T> result;
+      result.cont = newCont;
+      return result;
+   }
+};
 
+//}}}
+//{{{ Constants
+
+const string staticDir = "/var/www/blst";
+const string ingestDir = "/var/www/blog";
+
+const string appSuburl = "blog/";
+const string coreSubfolder = "_c/";
+const Int updateFreq = 300; // seconds before the cache gets rescanned
+const array<string, 10> coreFiles = {"notFound.png", "notFound.html", "core.css", "core.html", "core.js",
+                            "favicon.ico", "footer.html", "no.png", "yes.png", "termsOfUse.html"};
 //}}}
 //{{{ Utils
 
-string* shaveOffExtension(const string& fN) {
-   Int indDot = fN.indexOf(".");
+optional<Int> parseInt(Str s) {
+    try {
+       return optional { stoi(s) };
+    } catch (...) {
+       return {};
+    }
+}
+
+string shaveOffExtension(Str fN) {
+   Int indDot = fN.find(".");
    if (indDot < 0) {
       return fN;
    }
    return fN.substr(0, indDot);
 }
 
-Int getMaxVersion(vector<string> filenames) {
+Int getMaxVersion(Vec<string> filenames) {
    /// For a list like "file.txt, file-2.txt, file-3.txt", returns 3.
-   vector<string> withoutExts = filenames.map((x: string) => shaveOffExtension(x));
+   function<string(const string&)> transformer = shaveOffExtension;
+   Vec<string> withoutExts = filenames.transform(transformer);
    Int result = 1;
    for (auto& shortName : withoutExts) {
-      const indDash = shortName.find_last_of("-");
-      if (indDash < 0 || indDash == (shortName.length - 1))  {
+      const Int indDash = shortName.find_last_of("-");
+      if (indDash < 0 || indDash == (shortName.size() - 1))  {
          continue;
       }
-      const mbNumber = parseInt(shortName.substr(indDash + 1));
-      if (Number.isNaN(mbNumber)) {
+      const optional<Int> mbNumber = parseInt(shortName.substr(indDash + 1));
+      if (!mbNumber) {
          continue;
       } else if (result < mbNumber) {
-         result = mbNumber;
+         result = mbNumber.value();
       }
    }
    return result;
 }
 
-class Blog {
-private:
-   FileSys fs;
-public:
-   bool ingestCore() {
-      /// Processes the core ingest folder. Returns true iff it had any core files to ingest
-      /// (which implies that all HTML in the Blog needs to be regenerated)
-      const dir = getCoreDir();
-      if (fs.find(dir) == fs.end()) {
-         return false;
-      }
-      auto fileList = this.fs.listFiles(dir);
-      for (let inFile of fileList) {
-         if (isFixedCore(inFile.name)) {
-            this.moveFixedCore(dir, inFile);
-         }
-      }
-      return true;
-   }
-private:
-   string moveFixedCore(dir: string, inFile: FileInfo) {
-      /// Moves a fixed core file (i.e. not an additional script module) and returns its version
-      string sourceDir = getCoreDir();
-      string targetDir = staticDir + coreSubfolder;
-      string newVersion = fs.moveFileToNewVersion(sourceDir, inFile.name, targetDir);
-      return newVersion;
-   }
-}
 
-struct FileInfo {
-   string name;
-   Ts modified;
-};
-
-struct MockFile {
-   string name;
-   string cont;
-   Ts modified;
-};
-
-
-struct TestResults {
-   Int countRun;
-   Int countFailed;
-};
-
-
-void assertArrsEqual(vector<string> a, vector<string> b) {
+void assertArrsEqual(Vec<string> a, Vec<string> b) {
    if(a.size() != b.size())   {
-      throw new runtime_error("Arrays have different lengths");
+      throw new runtime_error("Arrays have different sizes");
    } else if (a.size() == 0) {
       return;
    }
@@ -214,7 +264,8 @@ void assertArrsEqual(vector<string> a, vector<string> b) {
    sort(b.begin(), b.end());
    for(Int i = 0; i < a.size(); i++) {
       if(a[i] != b[i]) {
-         throw new runtime_error("Arrays differ at " + i + ", \"" + a[i] + "\" vs \"" + b[i] + "\"");
+         string msg =  string("Arrays differ at " + i) + ", \"" + a[i] + "\" vs \"" + b[i] + "\"";
+         throw new runtime_error(msg);
       }
    }
 }
@@ -233,69 +284,84 @@ string getCoreDir() {
    return ingestDir + coreSubfolder;
 }
 
-template<typename T>
-vector<T>::iterator indexOf(vector<T> v, UnaryPredicate pred) {
-   return find_if(v.start(), v.end(), pred);
-}
+//}}}
+//{{{ Blog
+
+class Blog {
+
+private:
+   IFileSys* fs;
+public:
+   bool ingestCore() {
+      /// Processes the core ingest folder. Returns true iff it had any core files to ingest
+      /// (which implies that all HTML in the Blog needs to be regenerated)
+      auto dir = getCoreDir();
+      if (!fs->dirExists(dir)) {
+         return false;
+      }
+      auto fileList = fs->listFiles(dir);
+      for (auto& inFile : fileList) {
+         if (isFixedCore(inFile.name)) {
+            moveFixedCore(dir, inFile);
+         }
+      }
+      return true;
+   }
+   
+private:
+   string moveFixedCore(Str dir, FileInfo inFile) {
+      /// Moves a fixed core file (i.e. not an additional script module) and returns its version
+      string sourceDir = getCoreDir();
+      string targetDir = staticDir + coreSubfolder;
+      string newVersion = fs->moveFileToNewVersion(sourceDir, inFile.name, targetDir);
+      return newVersion;
+   }
+};
 
 //}}}
 //{{{ Mock FileSys
 
-class IFileSys {
-public:
-   virtual bool dirExists(string dir) = 0;
-   virtual vector<FileInfo> listFiles(string dir) = 0;
-   virtual vector<string> listDirs(string dir) = 0;
-   virtual string readTextFile(string dir, string fN) = 0;
-   virtual bool saveOverwriteFile(string dir, string fN, string cont) = 0;
-   virtual bool moveFile(string dir, string fN, string targetDir) = 0;
-   virtual string moveFileToNewVersion(string dir, string fN, string targetDir) = 0;
-   virtual bool deleteIfExists(string dir, string fN) = 0;
-   virtual vector<string> getNamesWithPrefix(string dir, string prefix) = 0;
-};
-
 class MockFileSys : IFileSys {
 private:
-   map<string, vector<MockFile>> fs;
+   map<string, Vec<MockFile>> fs;
 
 public:
-   bool dirExists(string dir) override {
+   bool dirExists(Str dir) override {
       return fs.find(dir) != fs.end();
    }
 
-   vector<FileInfo> listFiles(string dir) override {
-      map<string, vector<MockFile>>::iterator it = fs.find(dir);
+   Vec<FileInfo> listFiles(Str dir) override {
+      map<string, Vec<MockFile>>::iterator it = fs.find(dir);
       if (it == fs.end()) {
          return {};
       }
       auto existingFiles = it->second;
-      vector<string> result;
+      Vec<FileInfo> result;
       for (auto& x: existingFiles) {
-         if (x->name.startsWith(prefix)) {
-            result.push_back(FileInfo {x.name, x.modified});
-         }
+         result.push(FileInfo {x.name, x.modified});
       }
    }
 
-   vector<string> listDirs(string dir) override {
+   Vec<string> listDirs(Str dir) override {
       string dirWithSl = (dir.ends_with("/")) ? dir : dir + "/";
-      vector<string> result;
+      Vec<string> result;
       for (auto& x: fs) {
-         if (x->first->name.starts_with(dirWithSl)) {
-            Int indSlash = x.index_of("/");
-            result.push_back(indSlash ? x : x.substr(0, indSlash);
+         if (x.first.starts_with(dirWithSl)) {
+            Int indSlash = x.first.find("/");
+            result.push(indSlash ? x.first : x.first.substr(0, indSlash));
          }
       }
+      return result;
    }
 
-   bool saveOverwriteFile(string dir, string fN, string cont) override {
-      MockFile newFile = MockFIle { fN, cont, time::now() };
-      map<string, vector<MockFile>>::iterator it = fs.find(dir);
+   bool saveOverwriteFile(Str dir, Str fN, Str cont) override {
+      MockFile newFile = MockFile { fN, cont, time::now() };
+      map<string, Vec<MockFile>>::iterator it = fs.find(dir);
       if (it != fs.end()) {
-         vector<MockFile> existingFiles = it->second;
-         Int indexExisting = existingFiles.findIndex([](x) { x.name == fN });
+         Vec<MockFile> existingFiles = it->second;
+         Int indexExisting = existingFiles.findIf([](x) { x.name == fN });
          if (indexExisting == -1) {
-            existingFiles.push_back(newFile);
+            existingFiles.push(newFile);
          } else {
             existingFiles[indexExisting] = newFile;
          }
@@ -305,7 +371,7 @@ public:
       return true;
    }
 
-   bool moveFile(string dir, string fN, string targetDir) override {
+   bool moveFile(Str dir, Str fN, Str targetDir) override {
       auto sourceFiles = fs.find(dir)->second;
       Int indexSource = indexOf(sourceFiles, [&fN](MockFile x) {x.name == fN});
       auto targetFiles = fs.find(targetDir)->second;
@@ -313,7 +379,7 @@ public:
 
       Int indexTarget = targetFiles.findIndex([](x) { x.name == fN });
       if (indexTarget == -1) {
-         targetFiles.push_back(sourceFile);
+         targetFiles.push(sourceFile);
       } else {
          targetFiles[indexTarget] = sourceFile;
       }
@@ -321,7 +387,7 @@ public:
       return true;
    }
 
-   string moveFileToNewVersion(string dir, string fN, string targetDir) override {
+   string moveFileToNewVersion(Str dir, Str fN, Str targetDir) override {
       auto sourceFiles = fs.find(dir)->second;
       Int indexSource = indexOf(sourceFiles, [&fN](MockFile x) {x.name == fN});
       auto targetFiles = fs.find(targetDir)->second;
@@ -331,14 +397,14 @@ public:
       string newName = fN;
 
       if (existingWithThisPrefix.length == 0)  {
-         targetFiles.push_back(sourceFile);
+         targetFiles.push(sourceFile);
       } else {
          auto maxExistingVersion = getMaxVersion(existingWithThisPrefix);
          auto indLastDot = fN.find_last_of(".");
          newName = fN.substr(0, indLastDot) + "-" + (maxExistingVersion + 1)
                    + fN.substr(indLastDot);
 
-         targetFiles.push_back({
+         targetFiles.push({
             name: newName, cont: sourceFile.cont, modified: sourceFile.modified
          });
       }
@@ -346,53 +412,42 @@ public:
       return newName;
    }
 
-   bool deleteIfExists(string dir, string fN) override {
-      map<string, vector<MockFile>>::iterator it = fs.find(dir);
+   bool deleteIfExists(Str dir, Str fN) override {
+      map<string, Vec<MockFile>>::iterator it = fs.find(dir);
       if (it == fs.end()) {
          return true;
       }
       auto existingFiles = it->second;
-      vector<string>::iterator indexExisting = indexOf(existingFiles, [&fN](MockFile x) { x.name == fN });
+      Vec<string>::iterator indexExisting = indexOf(existingFiles, [&fN](MockFile x) { x.name == fN });
       if (indexExisting != existingFiles.end()) {
          existingFiles.erase(indexExisting);
       }
       return true;
    }
 
-   vector<string> getNamesWithPrefix(string dir, string prefix) override {
-      map<string, vector<MockFile>> ::iterator it = fs.find(dir);
+   Vec<string> getNamesWithPrefix(Str dir, Str prefix) override {
+      map<string, Vec<MockFile>> ::iterator it = fs.find(dir);
 
       if (it == fs.end()) {
          return {};
       }
-      vector<MockFile> existingFiles = it->second;
-      vector<string> result;
+      Vec<MockFile> existingFiles = it->second;
+      Vec<string> result;
       for (auto& exi: existingFiles) {
          if (exi.name.starts_with(prefix)) {
-            result.push_back(exi.name);
+            result.push(exi.name);
          }
       }
       return result;
    }
 
 
-   string readTextFile(string dir, string fN) override {
-      map<string, vector<MockFile>> ::iterator it = fs.find(dir);
+   string readTextFile(Str dir, Str fN) override {
+      map<string, Vec<MockFile>> ::iterator it = fs.find(dir);
       if (it == fs.end()) {
          return "";
       }
       return "";
    }
 };
-//}}}
-//{{{ Constants
-
-const string staticDir = "/var/www/blst";
-const string ingestDir = "/var/www/blog";
-
-const string appSuburl = "blog/";
-const string coreSubfolder = "_c/";
-const Int updateFreq = 300; // seconds before the cache gets rescanned
-const array<string, 10> coreFiles = {"notFound.png", "notFound.html", "core.css", "core.html", "core.js",
-                            "favicon.ico", "footer.html", "no.png", "yes.png", "termsOfUse.html"};
 //}}}
