@@ -1,8 +1,8 @@
 .RECIPEPREFIX = /
 
-#ifndef VERBOSE
-#.SILENT: # Silent mode unless you run it like "make all VERBOSE=1"
-#endif
+ifndef VERBOSE
+.SILENT: # Silent mode unless you run it like "make all VERBOSE=1"
+endif
 
 .PHONY: all clean help
 
@@ -34,9 +34,9 @@ clean: ## Delete cached build results
 _bin/test: | _bin
 / mkdir -p _bin/test
 
-test: | _bin/test ## Run unit tests
+test: ## Run unit tests
 / echo 'testing'
-/ g++ --std=c++23 -o _bin/test/test  test/test.cpp
+/ java test/test.java
 
 
 
