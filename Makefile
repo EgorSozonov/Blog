@@ -4,12 +4,17 @@ ifndef VERBOSE
 .SILENT: # Silent mode unless you run it like "make all VERBOSE=1"
 endif
 
-.PHONY: all clean help
+.PHONY: all clean test help asdf
 
 TSFLAGS=--strict true --esModuleInterop true --module es2020
 BIN=blog
 
+
 SOURCE=$(wildcard src/*.ts)
+
+ifndef $(EXES)
+EXES = ../../exes
+endif
 
 all: _bin/$(BIN) ## Build the whole project
 / @echo "========================================="
