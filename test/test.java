@@ -386,12 +386,12 @@ static class L<T> implements List<T> {
 static final String blogDir = "/var/www/blst";
 static final String ingestDir = "/var/www/blog";
 
-static final String appSuburl = "blog/";
-static final String coreSubfolder = "_c/";
+static final String appSuburl = "blog/"; // The URL prefix
 static final int updateFreq = 300; // seconds before the cache gets rescanned
-static final L<String> coreFiles =
-   L.of("notFound.png", "notFound.html", "core.css", "core.html", "core.js",
-           "favicon.ico", "footer.html", "no.png", "yes.png", "termsOfUse.html");
+// All fixed core files must be unique even without the file extension
+static final String[] fixedCoreFiles =
+         { "notFound.html", "img404.png", "style.css", "blog.html", "script.js",
+           "favicon.ico", "footer.html", "no.png", "yes.png", "termsOfUse.html"};
 
 //}}}
 //{{{ MockFileSys
@@ -604,7 +604,7 @@ static void assertArrsEqual(L<String> a, L<String> b) {
    Collections.sort(a);
    Collections.sort(b);
    for(int i = 0; i < a.size(); i++) {
-      if(a.get(i) != b.get(i)) {
+      if(!a.get(i).equals(b.get(i))) {
          throw new RuntimeException(
                "Arrays differ at " + i + ", \"" + a.get(i) + "\" vs \"" + b.get(i) + "\"");
       }
@@ -613,8 +613,8 @@ static void assertArrsEqual(L<String> a, L<String> b) {
 
 
 boolean isFixedCore(String fN) {
-   for (int i = 0; i < coreFiles.size(); i++) {
-      if (coreFiles.get(i).equals(fN)) {
+   for (int i = 0; i < fixedCoreFiles.length; i++) {
+      if (fixedCoreFiles[i].equals(fN)) {
          return true;
       }
    }
@@ -622,7 +622,7 @@ boolean isFixedCore(String fN) {
 }
 
 static String getIngestDir() {
-   return Paths.get(ingestDir, coreSubfolder).toString();
+   return Paths.get(ingestDir).toString();
 }
 
 static void runTest(Action theTest, TestResults counters) {
@@ -661,25 +661,44 @@ static <X> void print(X x) {
    System.out.println(x);
 }
 
+static <X> int findIndex(X[] arr, Predicate<X> pred) {
+   for (int i = 0; i < arr.length; i++) {
+      if (pred.test(arr[i])) {
+         return i;
+      }
+   }
+   return -1;
+}
+
 //}}}
 //{{{ Blog
 
 static class Blog {
    FileSys fs;
+   String[] fixedVersions; // the new full names of all the fixed core files
+   Map<String, String> extraVersions; // the new full names of the extra core scripts
 
    public Blog(FileSys fs)  {
       this.fs = fs;
+      fixedVersions = new String[fixedCoreFiles.length];
+      extraVersions = new HashMap<String, String>();
    }
 
    void ingestCore() {
-      String dir = Paths.get(ingestDir, coreSubfolder).toString();
+      String dir = Paths.get(ingestDir).toString();
       if (!fs.dirExists(dir))  {
          return;
       }
       var files = fs.listFiles(dir);
       for (FileInfo fi : files) {
-         if (coreFiles.findIndex(x -> x.equals(fi.name)) > -1) {
-            fs.moveFileToNewVersion(dir, fi.name, blogDir);
+         String fN = fi.name;
+         int indFixed = findIndex(fixedCoreFiles, x -> x.equals(fN));
+         if (indFixed > -1) {
+            String newVersionOfFixed = fs.moveFileToNewVersion(dir, fN, blogDir);
+            fixedVersions[indFixed] = newVersionOfFixed;
+         } else if (fN.endsWith(".js")) {
+            String newVersionOfExtra = fs.moveFileToNewVersion(dir, fN, blogDir);
+            extraVersions.put(shaveOffExtension(fN), newVersionOfExtra);
          }
       }
    }
@@ -723,22 +742,38 @@ static void testMaxVersion() {
 //}}}
 
 static void testIngestCore() {
+   /// First ingestion of fixed core files
+   var fs = new MockFileSys();
+   String inDir = getIngestDir();
+   fs.saveOverwriteFile(inDir, "script.js", "core script");
+   fs.saveOverwriteFile(inDir, "style.css", "core styles");
+   Blog b = new Blog(fs);
+
+   b.ingestCore();
+
+   var coreNames = fs.listFiles(blogDir).trans(x -> x.name);
+   assertArrsEqual(coreNames, L.of("script.js", "style.css"));
+}
+
+
+static void testUpdateCore() {
+   /// Update of a fixed core file to a new version
    var fs = new MockFileSys();
    String inDir = getIngestDir();
    print("saving to dir " + inDir);
-   fs.saveOverwriteFile(inDir, "core.js", "core script");
-   fs.saveOverwriteFile(inDir, "core.css", "core styles");
+   fs.saveOverwriteFile(blogDir, "termsOfUse.html", "Terms of Use");
+   fs.saveOverwriteFile(inDir, "img404.png", "img");
+   fs.saveOverwriteFile(inDir, "termsOfUse.html", "New terms of use");
    Blog b = new Blog(fs);
-   b.ingestCore();
-   var coreFiles = fs.listFiles(blogDir);
-   var coreNames = coreFiles.trans(x -> x.name);
-   print("core names");
-   for (String a : coreNames) {
-      print(a);
-   }
-   assertArrsEqual(coreFiles.trans(x -> x.name), L.of("core.js", "core.css"));
-}
 
+   b.ingestCore();
+
+   var coreNames = fs.listFiles(blogDir).trans(x -> x.name);
+   assertArrsEqual(coreNames,
+         L.of("termsOfUse.html", "termsOfUse-2.html", "img404.png"));
+   int indInFixed = findIndex(fixedCoreFiles, x -> x.equals("termsOfUse.html"));
+   blAssert(b.fixedVersions[indInFixed].equals("termsOfUse-2.html"));
+}
 
 public static void main(String[] args) {
    System.out.println("Hw");
@@ -746,7 +781,8 @@ public static void main(String[] args) {
 //~   runTest(Test::testSaveFile, counters);
 //~   runTest(Test::testFilePrefixes, counters);
 //~   runTest(Test::testMaxVersion, counters);
-   runTest(Test::testIngestCore, counters);
+//~   runTest(Test::testIngestCore, counters);
+   runTest(Test::testUpdateCore, counters);
    if (counters.countFailed > 0)  {
       System.out.println("Failed " + counters.countFailed + " tests");
    } else {
