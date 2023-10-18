@@ -612,7 +612,7 @@ static void assertArrsEqual(L<String> a, L<String> b) {
 }
 
 
-boolean isFixedCore(String fN) {
+static boolean isFixedCore(String fN) {
    for (int i = 0; i < fixedCoreFiles.length; i++) {
       if (fixedCoreFiles[i].equals(fN)) {
          return true;
@@ -657,7 +657,7 @@ static int getMaxVersion(L<String> filenames) {
    return result;
 }
 
-static <X> void print(X x) {
+static <X> void print(X x) { // No relation to the band Static-X
    System.out.println(x);
 }
 
@@ -669,6 +669,12 @@ static <X> int findIndex(X[] arr, Predicate<X> pred) {
    }
    return -1;
 }
+
+static String splitDirName(String dir) {
+   /// Changes an ingestion dir like "a.b.foo" to the nested subfolder "a/b/foo"
+   return Paths.get(dir.split(".")).toString();
+}
+
 
 //}}}
 //{{{ Blog
