@@ -14,6 +14,8 @@ import java.util.function.Predicate;
 import java.util.function.Function;
 import java.lang.reflect.Array;
 import java.nio.file.Paths;
+import java.nio.file.Files;
+
 //}}}
 class Test {
 
@@ -708,6 +710,132 @@ static class Blog {
          }
       }
    }
+
+   void ingestDocs() {
+      // determine the 4 lists
+      // calculate the nav trees
+      // create new docs
+      // update changing docs local files
+      // update changing docs
+      // delete old local files
+      // delete the to-delete docs
+      Ingestion ing = buildIngestion();
+      createNewDocs(ing);
+      updateDocs(ing);
+      deleteDocs(ing);
+   }
+
+   Ingestion buildIngestion() {
+      L<String> createDirs = new L();
+      L<String> updateDirs = new L();
+      L<String> deleteDirs = new L();
+      L<String> oldDirs = new L();
+      try (Stream<Path> walk = Files.walk(path)) {
+         walk.filter(Files::isDirectory)
+             .forEach(x -> oldDirs.add(x.toString));
+      }
+   }
+
+
+   void createNewDocs(Ingestion ing) {
+
+   }
+
+   void updateDocs(Ingestion ing) {
+
+   }
+
+
+   void deleteDocs(Ingestion ing) {
+
+   }
+}
+
+static class Ingestion {
+   L<CreateUpdate> createDocs;
+   L<CreateUpdate> updateDocs;
+   L<String> deleteDocs; // list of dirs like `a/b/c`
+   L<String> allDocs; // list of dirs like `a/b/c`
+   NavTree thematic;
+   NavTree temporal;
+
+   public Ingestion(L<String> createDirs, L<String> updateDirs, L<String> deleteDirs, L<String> oldDirs) {
+
+   }
+
+   void buildNavTrees() {
+      /// Returns a list of 2 items: l(topical temporal)
+      thematic =
+   }
+}
+
+static class CreateUpdate {
+   String sourceDir; // source dir like `a.b.c`
+   String targetDir; // target dir like `a/b/c`
+   Map<String, String> localVersions; // map from prefix to full filename for local files
+}
+
+static class NavTree() {
+   String name;
+   L<NavTree> children;
+   public NavTree(String name, L<NavTree> children) {
+      this.name = name;
+      this.children = children;
+   }
+
+   static int[] createBreadcrumbsThematic(String subAddress) {
+      /// Make breadcrumbs that trace the way to this file from the root.
+      /// Attempts to follow the spine, but this doesn't work for temporal nav trees, so in case
+      /// of an element not found it switches to the slow version (which searches through
+      /// all the leaves).
+   }
+
+   static int[] createBreadcrumbsTemporal(String subAddress) {
+      /// Make breadcrumbs that trace the way to this file from the root.
+      /// Searches the leaves only, which is necessary for temporal nav trees.
+   }
+
+   String toJson() {
+       val stack = ArrayDeque<Tuple<NavTree, Int>>()
+       if (this.children.size == 0) return ""
+
+       val result = StringBuilder(100)
+       stack.push(Tuple(this, 0))
+       while (stack.any()) {
+          val top = stack.peek()
+
+          if (top.second < top.first.children.size) {
+             val next = top.first.children[top.second]
+             if (next.children.size > 0) {
+                result.append("[\"")
+                result.append(next.name)
+                result.append("\", [")
+                stack.push(Tuple(next, 0))
+             } else {
+                result.append("[\"")
+                result.append(next.name)
+                if (top.second == top.first.children.size - 1) {
+                   result.append("\", [] ] ")
+                } else {
+                   result.append("\", [] ], ")
+                }
+             }
+          } else {
+              stack.pop()
+
+              if (stack.any()) {
+                 val parent = stack.peek()
+                 if (parent.second < parent.first.children.size) {
+                    result.append("]], ")
+                 } else {
+                    result.append("]] ")
+                 }
+              }
+          }
+          top.second += 1
+       }
+       return result.toString()
+   }
 }
 
 //}}}
@@ -784,11 +912,13 @@ static void testUpdateCore() {
 public static void main(String[] args) {
    System.out.println("Hw");
    TestResults counters = new TestResults();
+
 //~   runTest(Test::testSaveFile, counters);
 //~   runTest(Test::testFilePrefixes, counters);
 //~   runTest(Test::testMaxVersion, counters);
 //~   runTest(Test::testIngestCore, counters);
    runTest(Test::testUpdateCore, counters);
+
    if (counters.countFailed > 0)  {
       System.out.println("Failed " + counters.countFailed + " tests");
    } else {
