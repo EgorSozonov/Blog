@@ -4,34 +4,28 @@ ifndef VERBOSE
 .SILENT: # Silent mode unless you run it like "make all VERBOSE=1"
 endif
 
-.PHONY: all clean test help asdf
-
-TSFLAGS=--strict true --esModuleInterop true --module es2020
-BIN=blog
-
-
-SOURCE=$(wildcard src/*.ts)
-
 ifndef $(EXES)
 EXES = ../../exes
 endif
 
-all: _bin/$(BIN) ## Build the whole project
+.PHONY: all build clean test help binFolder
+
+APP=blog
+BUILDDIR=$(EXES)/$(APP)
+
+all: $(BUILDDIR) ## Build the whole project
 / @echo "========================================="
 / @echo "              BUILD SUCCESS              "
 / @echo "========================================="
-
-install:
-/ npm install --save-dev typescript@$(TYPESCRIPT_VERSION)
-
-build: | _bin ## Build the project
-/ tsc --outdir _bin src/blog.ts
 
 run:
 / node _bin/$(BIN).js
 
 binFolder:
-/ mkdir -p _bin
+/ mkdir -p $(BUILDDIR)
+
+build: | binFolder ## Build the project
+/ javac -d $(BUILDDIR) src/Blog.java src/Utils.java
 
 clean: ## Delete cached build results
 / rm -rf _bin

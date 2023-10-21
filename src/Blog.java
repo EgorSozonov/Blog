@@ -1,10 +1,35 @@
 package tech.sozonov.blog;
+//{{{ Imports
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.List;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.ListIterator;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.Optional;
+import java.time.Instant;
+import java.util.function.Predicate;
+import java.util.function.Function;
+import java.util.stream.Stream;
+import java.lang.reflect.Array;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.time.format.DateTimeFormatter;
+import static tech.sozonov.blog.Utils.*;
+//}}}
 
 class Blog {
+
 //{{{ Constants
 
-static final String blogDir = "/var/www/blst";
-static final String ingestDir = "/var/www/blog";
+static final String blogDir = "/var/www/blog";
+static final String ingestDir = "/var/www/blogIngest";
 
 static final String appSuburl = "blog/"; // The URL prefix
 static final int updateFreq = 300; // seconds before the cache gets rescanned
@@ -21,12 +46,13 @@ static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-
 FileSys fs;
 String[] fixedVersions; // the new full names of all the fixed core files
 Map<String, String> extraVersions; // the new full names of the extra core scripts
-// Entries are like "graph" => "graph-3.js"
+                                   // Entries are like "graph" => "graph-3.js"
 
 
 static final String datesOpen = "<!-- Dates -->";
 static final String datesClose = "<!-- / -->";
 static final String datesTemplate = "<div>Created: $created, updated: $updated</div>";
+
 
 
 public Blog(FileSys fs)  {
@@ -43,7 +69,13 @@ void ingestCore() {
     var files = fs.listFiles(dir);
     for (FileInfo fi : files) {
         String fN = fi.name;
-        int indFixed = findIndex(fixedCoreFiles, x -> x.equals(fN));
+        int indFixed = -1;
+        for (int j = 0; j < fixedCoreFiles.length; j++)  {
+            if (fixedCoreFiles[j].equals(fN)) {
+                indFixed = j;
+            }
+        }
+
         if (indFixed > -1) {
             String newVersionOfFixed = fs.moveFileToNewVersion(dir, fN, blogDir);
             fixedVersions[indFixed] = newVersionOfFixed;
@@ -68,43 +100,56 @@ void ingestDocs() {
     deleteDocs(ing);
 }
 
+
 Ingestion buildIngestion() {
     L<CreateUpdate> createDirs = new L();
     L<CreateUpdate> updateDirs = new L();
     L<String> deleteDirs = new L();
-    L<String> allDirs = new L();
+    L<Doc> allDirs = new L();
     Set<String> oldDirs = new HashSet();
-    try (Stream<Path> walk = Files.walk(path)) {
+    String todayDt = formatter.format(Instant.now());
+    try (Stream<Path> walk = Files.walk(Paths.get(blogDir))) {
         walk.filter(Files::isDirectory)
             .forEach(x -> {
-                allDirs.add(x.toString());
                 oldDirs.add(x.toString());
             });
     }
 
-    L<String> ingestDirs = fs.listDir(ingestDir);
-    L<String> targetDirs = ingestDirs.trans(x -> Blog::convertToTargetDir(x));
-    for (int i = 0; i < ingestDirs.size; i++) {
-        String inSourceDir = sourceDirs.get(i);
+    L<FileInfo> ingestDirs = fs.listFiles(ingestDir);
+    L<String> targetDirs = ingestDirs.trans(x -> convertToTargetDir(x.name));
+    for (int i = 0; i < ingestDirs.size(); i++) {
+        String inSourceDir = ingestDirs.get(i).name;
         String inTargetDir = targetDirs.get(i);
+        String newContent = "";
+
+        int mbIndex = inFiles.findIndex(x -> x.name.equals("i.html"));
         if (oldDirs.contains(inTargetDir)) {
-            var inFiles = fs.listFiles(Paths.get(ingestDir, ingestDirs.get(i))).toString();
-            int mbIndex = inFiles.first(x -> x.name.equals("i.html"));
-            // a 0 or 1 byte-long i.html means "delete this document"
-            if (mbIndex > -1 && inFiles.get(mbIndex).cont.size() <= 1) {
-                deleteDirs.add(inTargetDir);
-            } else {
-                updateDirs.add(new CreateUpdate(inSourceDir, inTargetDir));
+            var inFiles = fs.listFiles(Paths.get(ingestDir, ingestDirs.get(i).name).toString());
+            String oldContent = fs.readTextFile(inTargetDir, "i.html");
+
+            if (mbIndex > -1) {
+                newContent = fs.readTextFile(inSourceDir, "i.html");
+                if (newContent.length() <= 1) {
+                    // a 0 or 1 byte-long i.html means "delete this document"
+                    deleteDirs.add(inTargetDir);
+                    continue;
+                }
             }
-        } else {
+            String updatedContent = buildDocument(oldContent, todayDt, newContent);
+            updateDirs.add(new CreateUpdate(inSourceDir, inTargetDir));
+            allDirs.add(new Doc(inTargetDir, updatedContent,
+                        parseCreatedDate(oldContent), todayDt));
+        } else if (mbIndex > -1) {
+            String freshContent = buildDocument("", todayDt, newContent);
             createDirs.add(new CreateUpdate(inSourceDir, inTargetDir));
-            allDirs.add(inTargetDir);
+            allDirs.add(new Doc(inTargetDir, freshContent, todayDt, ""));
         }
     }
+    return new Ingestion(createDirs, updateDirs, deleteDirs, allDirs);
 }
 
 
-static String buildDocument(String old, Instant newModified, String newContent) {
+String buildDocument(String old, String updatedDt, String newContent) {
     if (old == "" && newContent == "") {
         throw new RuntimeException("Can't build a document with no inputs!");
     }
@@ -112,18 +157,21 @@ static String buildDocument(String old, Instant newModified, String newContent) 
     String mainSource = (newContent != "") ? newContent : old;
     String createdDate = "";
     if (old == "") {
-        createdDate = formatter.format(newModified);
+        createdDate = updatedDt;
     } else {
         createdDate = parseCreatedDate(old);
     }
+
     return result.toString();
 }
+
 
 static String parseCreatedDate(String old) {
     /// Parses the created date from the old document
     int indStart = old.indexOf(datesOpen);
     int indEnd = old.indexOf(datesClose);
-    String datePart = old.substring(indStart + datesOpen.length, datesClose);
+    int indDateStart = indStart + datesOpen.length();
+    String datePart = old.substring(indDateStart, indDateStart + datesClose.length());
     return datePart.substring(14, 24); // Skipping length of `<div>Created: `
 }
 
@@ -142,7 +190,8 @@ void deleteDocs(Ingestion ing) {
 
 static String convertToTargetDir(String ingestDir) {
     /// Changes an ingestion dir like "a.b.foo" to the nested subfolder "a/b/foo"
-    return Paths.get(ingestDir.split(".").replace(" ", "")).toString();
+    String dirParts = ingestDir.replace(" ", "").replace(".", "/");
+    return Paths.get(dirParts).toString();
 }
 
 
@@ -157,7 +206,7 @@ static class Ingestion {
     L<CreateUpdate> createDocs;
     L<CreateUpdate> updateDocs;
     L<String> deleteDocs; // list of dirs like `a/b/c`
-    L<String> allDocs; // list of dirs like `a/b/c`
+    L<Doc> allDocs; // list of dirs like `a/b/c`
     NavTree thematic;
     NavTree temporal;
 
@@ -167,19 +216,87 @@ static class Ingestion {
         this.updateDocs = updateDirs;
         this.deleteDocs = deleteDirs;
         this.allDocs = allDirs;
-        var trees = buildNavTrees(allDirs);
-        this.thematic = trees.get(0);
-        this.temporal = trees.get(1);
+        this.thematic = buildThematic(allDirs);
+        this.temporal = buildTemporal(allDirs);
     }
 
-    L<NavTree> buildNavTrees(L<String> allDirs) {
-        /// Returns a list of 2 items: l(topical temporal)
-        var arrNavigation = toPageArray(allDirs);
-        thematic = null;
+
+    NavTree buildThematic(L<Doc> allDirs) {
+        Collections.sort(allDirs, (x, y) ->{
+            int folderLengthCommon = Math.min(x.spl.size(), y.spl.size());
+            for (int i = 0; i < folderLengthCommon; i++) {
+                int cmp = x.spl.get(i).compareTo(y.spl.get(i));
+                if (cmp != 0) {
+                    return cmp;
+                }
+            }
+            if (x.spl.size() != y.spl.size()) {
+                return y.spl.size() - x.spl.size();
+            } else {
+                return x.spl.last().compareTo(y.spl.last());
+            }
+        });
+        var docsByName = allDirs;
+
+        var st = new L<NavTree>();
+        var root = new NavTree("", new L<NavTree>());
+        st.add(root);
+
+        for (int i = 0; i < docsByName.size(); i++) {
+            var spl = docsByName.get(i).spl;
+            int lenSamePrefix = Math.min(st.size() - 1, spl.size()) - 1;
+            while (lenSamePrefix > -1
+                    && !st.get(lenSamePrefix + 1).name.equals(spl.get(lenSamePrefix))) {
+                --lenSamePrefix;
+            }
+            for (int j = lenSamePrefix + 1; j < spl.size(); j++) {
+                var newElem = (j == spl.size() - 1)
+                                ? new NavTree(docsByName.get(i).dir, new L())
+                                : new NavTree(spl.get(j), new L());
+                if (j + 1 < st.size())  {
+                    st.set(j + 1, newElem);
+                } else {
+                    st.add(newElem);
+                }
+                var prev = st.get(j);
+                prev.children.add(newElem);
+            }
+        }
+        return root;
     }
 
-    static toPageArray(L<Doc> allDirs) {
 
+    NavTree buildTemporal(L<Doc> allDirs) {
+        Collections.sort(allDirs, (x, y) -> x.createdDate.compareTo(y.createdDate));
+        var docsByDate = allDirs;
+        var st = new L<NavTree>();
+        var root = new NavTree("", new L<NavTree>());
+        st.add(root);
+
+        for (int i = 0; i < docsByDate.size(); i++) {
+            Doc doc = docsByDate.get(i);
+            var spl = doc.spl;
+            String yearName = doc.createdDate.substring(0, 4);
+            String monthName = monthNameOf(doc.createdDate);
+
+            int lenSamePrefix = Math.min(st.size() - 1, 2) - 1;
+
+            if (lenSamePrefix > -1 && yearName != st.get(1).name) lenSamePrefix = -1;
+            if (lenSamePrefix > 0 && monthName != st.get(2).name) lenSamePrefix = 0;
+            for (int j = lenSamePrefix + 1; j < 3; j++) {
+                String name = (j == 2 ? doc.spl.last() : (j == 1 ? monthName : yearName));
+
+                var newElem = new NavTree(spl.get(j), new L());
+                if (j + 1 < st.size())  {
+                    st.set(j + 1, newElem);
+                } else {
+                    st.add(newElem);
+                }
+                var prev = st.get(j);
+                prev.children.add(newElem);
+            }
+        }
+        return root;
     }
 }
 
@@ -187,30 +304,48 @@ static class Ingestion {
 static class CreateUpdate {
     String sourceDir; // source dir like `a.b.c`
     String targetDir; // target dir like `a/b/c`
+    String newContent; // content of the new "i.html" file, if it's present
     Map<String, String> localVersions; // map from prefix to full filename for local files
     public CreateUpdate(String sourceDir, String targetDir)  {
         this.sourceDir = sourceDir;
         this.targetDir = targetDir;
+        this.newContent = "";
+        localVersions = new HashMap();
+    }
+
+    public CreateUpdate(String sourceDir, String targetDir, String newContent)  {
+        this.sourceDir = sourceDir;
+        this.targetDir = targetDir;
+        this.newContent = newContent;
         localVersions = new HashMap();
     }
 }
+
 
 static class Doc {
     String dir;
     String createdDate;
     String updatedDate;
+    L<String> spl;
 
-    static ofNew() {
+    public Doc(String dir, String createdDate, String updatedDate) {
+        this.dir = dir;
+        this.createdDate = createdDate;
+        this.updatedDate = updatedDate;
+        this.spl = L.of(dir.split("/"));
+    }
+
+    static void ofNew() {
 
     }
 
-    static ofUpdate() {
+    static void ofUpdate() {
 
     }
 }
 
 
-static class NavTree() {
+static class NavTree {
     String name;
     L<NavTree> children;
     int currInd; // current index into this tree, used during traversals
@@ -226,53 +361,55 @@ static class NavTree() {
         /// Attempts to follow the spine, but this doesn't work for temporal nav trees, so in case
         /// of an element not found it switches to the slow version (which searches through
         /// all the leaves).
+        return null;
     }
 
     static int[] createBreadcrumbsTemporal(String subAddress) {
         /// Make breadcrumbs that trace the way to this file from the root.
         /// Searches the leaves only, which is necessary for temporal nav trees.
+        return null;
     }
 
     String toJson() {
-         var st = L<NavTree>()
+         var st = new L<NavTree>();
          if (this.children.size() == 0) {
              return "";
          }
 
-         val result = new StringBuilder(100);
-         stack.push(Tuple(this, 0));
-         while (stack.any()) {
-             val top = stack.peek()
+         var result = new StringBuilder(100);
+         st.add(this);
+         while (st.nonEmpty()) {
+             var top = st.last();
 
-             if (top.second < top.first.children.size) {
-                 val next = top.first.children[top.second]
-                 if (next.children.size > 0) {
-                     result.append("[\"")
-                     result.append(next.name)
-                     result.append("\", [")
-                     stack.push(Tuple(next, 0))
+             if (top.currInd < top.children.size()) {
+                 var next = top.children.get(top.currInd);
+                 if (next.children.size() > 0) {
+                     result.append("[\"");
+                     result.append(next.name);
+                     result.append("\", [");
+                     st.add(next);
                  } else {
-                     result.append("[\"")
-                     result.append(next.name)
-                     if (top.second == top.first.children.size - 1) {
-                         result.append("\", [] ] ")
+                     result.append("[\"");
+                     result.append(next.name);
+                     if (top.currInd == top.children.size() - 1) {
+                         result.append("\", [] ] ");
                      } else {
-                         result.append("\", [] ], ")
+                         result.append("\", [] ], ");
                      }
                  }
              } else {
-                  stack.pop()
+                  st.removeLast();
 
-                  if (stack.any()) {
-                      val parent = stack.peek()
-                      if (parent.second < parent.first.children.size) {
-                          result.append("]], ")
+                  if (st.nonEmpty()) {
+                      var parent = st.last();
+                      if (parent.currInd < parent.children.size()) {
+                          result.append("]], ");
                       } else {
-                          result.append("]] ")
+                          result.append("]] ");
                       }
                   }
              }
-             top.second++;
+             ++top.currInd;
          }
          return result.toString();
     }

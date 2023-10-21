@@ -1,5 +1,6 @@
-//{{{ Imports
 package tech.sozonov.blog;
+//{{{ Imports
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -17,11 +18,10 @@ import java.nio.file.Paths;
 import java.nio.file.Files;
 
 //}}}
+
 class Test {
 
 static DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-
-
 
 //{{{ MockFileSys
 

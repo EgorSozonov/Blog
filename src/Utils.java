@@ -1,6 +1,27 @@
 package tech.sozonov.blog;
+//{{{ Imports
 
-///{{{ Println
+import java.util.HashMap;
+import java.util.Map;
+import java.util.List;
+import java.util.Arrays;
+import java.util.Iterator;
+import java.util.ListIterator;
+import java.util.Collection;
+import java.util.Optional;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.function.Predicate;
+import java.util.function.Function;
+import java.lang.reflect.Array;
+import java.nio.file.Paths;
+import java.nio.file.Files;
+
+//}}}
+
+class Utils {
+
+//{{{ Println
 interface Printer {
      static <T> void printNoLn(T t) {
          System.out.print(t);
@@ -10,10 +31,10 @@ interface Printer {
          System.out.println(t);
      }
 }
-///}}}
+//}}}
 //{{{ List
 
-class L<T> implements List<T> {
+static class L<T> implements List<T> {
     private static final int DEFAULT_CAPACITY = 10;
     private int size;
     private int modCount = 0;
@@ -47,7 +68,7 @@ class L<T> implements List<T> {
         return size == 0;
     }
 
-    public boolean notEmpty()  {
+    public boolean nonEmpty()  {
         return size > 0;
     }
 
@@ -109,10 +130,18 @@ class L<T> implements List<T> {
         checkBoundExclusive(index);
         T r = data[index];
         modCount++;
-        if (index != --size) { System.arraycopy(data, index + 1, data, index, size - index); }
+        --size; 
+        if (index != size) { System.arraycopy(data, index + 1, data, index, size - index); }
         // Aid for garbage collection by releasing this pointer.
         data[size] = null;
         return r;
+    }
+    
+    public void removeLast() {
+        checkBoundExclusive(size - 1);
+        ++modCount; 
+        --size;
+        data[size] = null;
     }
 
     public void clear() {
@@ -283,8 +312,10 @@ class L<T> implements List<T> {
         return result;
     }
 
-    public Optional<T> first(Predicate<T> pred)  {
-        /// Find index of first element satisfying predicate. The method missing from the Java streams
+
+    public Optional<T> first(Predicate<T> pred) {
+        /// Find index of first element satisfying predicate. 
+        /// The method missing from the Java streams
         for (int i = 0; i < size; i++) {
             if (pred.test(data[i])) {
                 return Optional.of(data[i]);
@@ -293,6 +324,13 @@ class L<T> implements List<T> {
         return Optional.empty();
     }
 
+
+    public T last() {
+        /// Returns the last element. Assumes the list is non-empty
+        return data[size - 1];
+    }
+    
+    
     public static class LIterator<T> implements ListIterator<T> {
         private int i;
         private int size;
@@ -366,8 +404,8 @@ class L<T> implements List<T> {
 //{{{ Action
 
 @FunctionalInterface
-public interface Action {
-     void run();
+interface Action {
+    void run();
 }
 
 //}}}
@@ -381,6 +419,7 @@ static String shaveOffExtension(String fN) {
     return fN.substring(0, indDot);
 }
 
+
 static Optional<Integer> parseInt(String s) {
     try {
          return Optional.of(Integer.parseInt(s));
@@ -390,5 +429,16 @@ static Optional<Integer> parseInt(String s) {
 }
 
 
+static final String[] months = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "July", "Aug",
+    "Sep", "Oct", "Nov", "Dec" };
+
+
+static String monthNameOf(String dt) {
+    /// "2023-04-01" => "Apr"
+    int monthNum = Integer.parseInt(dt.substring(5, 7));
+    return months[monthNum - 1];
+}
 
 //}}}
+
+}
