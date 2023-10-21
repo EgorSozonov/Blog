@@ -19,6 +19,8 @@ import java.nio.file.Files;
 //}}}
 class Test {
 
+static DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
 interface FileSys {
     boolean dirExists(String dir);
     L<FileInfo> listFiles(String dir);
@@ -305,6 +307,7 @@ static class L<T> implements List<T> {
     }
 
     public Optional<T> first(Predicate<T> pred)  {
+        /// Find index of first element satisfying predicate. The method missing from the Java streams
         for (int i = 0; i < size; i++) {
             if (pred.test(data[i])) {
                 return Optional.of(data[i]);
@@ -435,14 +438,14 @@ static class MockFileSys implements FileSys {
 
     @Override
     L<String> getDirsContainingFile(String fN) {
-        /// Gets the list of directories containing a filename, for example "i.html"            
-        L<String> result = new L(10); 
+        /// Gets the list of directories containing a filename, for example "i.html"
+        L<String> result = new L(10);
         for (var e : fs.entrySet()) {
             if (e.getValue().any(x -> x.name.equals("i.html"))) {
                 result.add(e.getKey());
             }
         }
-        return result; 
+        return result;
     }
 
     @Override
@@ -553,6 +556,7 @@ static class MockFile {
     String name;
     String cont;
     Instant modified;
+
     public MockFile(String name, String cont, Instant modified)  {
         this.name = name;
         this.cont = cont;
@@ -640,6 +644,12 @@ static String getIngestDir() {
     return Paths.get(ingestDir).toString();
 }
 
+static void printIngestion(Ingestion ing) {
+    /// Print the full structure for testing purposes
+
+
+}
+
 static void runTest(Action theTest, TestResults counters) {
     try {
         theTest.run();
@@ -685,190 +695,6 @@ static <X> int findIndex(X[] arr, Predicate<X> pred) {
     return -1;
 }
 
-static String splitDirName(String dir) {
-    /// Changes an ingestion dir like "a.b.foo" to the nested subfolder "a/b/foo"
-    return Paths.get(dir.split(".")).toString();
-}
-
-
-//}}}
-//{{{ Blog
-
-static class Blog {
-    FileSys fs;
-    String[] fixedVersions; // the new full names of all the fixed core files
-    Map<String, String> extraVersions; // the new full names of the extra core scripts
-    // Entries are like "graph" => "graph-3.js" 
-
-    public Blog(FileSys fs)  {
-        this.fs = fs;
-        fixedVersions = new String[fixedCoreFiles.length];
-        extraVersions = new HashMap<String, String>();
-    }
-
-    void ingestCore() {
-        String dir = Paths.get(ingestDir).toString();
-        if (!fs.dirExists(dir))  {
-            return;
-        }
-        var files = fs.listFiles(dir);
-        for (FileInfo fi : files) {
-            String fN = fi.name;
-            int indFixed = findIndex(fixedCoreFiles, x -> x.equals(fN));
-            if (indFixed > -1) {
-                String newVersionOfFixed = fs.moveFileToNewVersion(dir, fN, blogDir);
-                fixedVersions[indFixed] = newVersionOfFixed;
-            } else if (fN.endsWith(".js")) {
-                String newVersionOfExtra = fs.moveFileToNewVersion(dir, fN, blogDir);
-                extraVersions.put(shaveOffExtension(fN), newVersionOfExtra);
-            }
-        }
-    }
-
-    void ingestDocs() {
-        // determine the 4 lists
-        // calculate the nav trees
-        // create new docs
-        // update changing docs local files
-        // update changing docs
-        // delete old local files
-        // delete the to-delete docs
-        Ingestion ing = buildIngestion();
-        createNewDocs(ing);
-        updateDocs(ing);
-        deleteDocs(ing);
-    }
-
-    Ingestion buildIngestion() {
-        L<String> createDirs = new L();
-        L<String> updateDirs = new L();
-        L<String> deleteDirs = new L();
-        L<String> oldDirs = new L();
-        try (Stream<Path> walk = Files.walk(path)) {
-            walk.filter(Files::isDirectory)
-                 .forEach(x -> oldDirs.add(x.toString));
-        }
-    }
-
-
-    void createNewDocs(Ingestion ing) {
-
-    }
-
-    void updateDocs(Ingestion ing) {
-
-    }
-
-
-    void deleteDocs(Ingestion ing) {
-
-    }
-}
-
-static class Ingestion {
-    L<CreateUpdate> createDocs;
-    L<CreateUpdate> updateDocs;
-    L<String> deleteDocs; // list of dirs like `a/b/c`
-    L<String> allDocs; // list of dirs like `a/b/c`
-    NavTree thematic;
-    NavTree temporal;
-
-    public Ingestion(L<String> createDirs, L<String> updateDirs, L<String> deleteDirs, L<String> oldDirs) {
-
-    }
-
-    void buildNavTrees() {
-        /// Returns a list of 2 items: l(topical temporal)
-        thematic =
-    }
-}
-
-
-static class CreateUpdate {
-    String sourceDir; // source dir like `a.b.c`
-    String targetDir; // target dir like `a/b/c`
-    Map<String, String> localVersions; // map from prefix to full filename for local files
-}
-
-
-static class NavTree() {
-    String name;
-    L<NavTree> children;
-    int currInd; // current index into this tree, used during traversals 
-    public NavTree(String name, L<NavTree> children) {
-        this.name = name;
-        this.children = children;
-        this.currInd = 0;
-    }
-
-    static int[] createBreadcrumbsThematic(String subAddress) {
-        /// Make breadcrumbs that trace the way to this file from the root.
-        /// Attempts to follow the spine, but this doesn't work for temporal nav trees, so in case
-        /// of an element not found it switches to the slow version (which searches through
-        /// all the leaves).
-    }
-
-    static int[] createBreadcrumbsTemporal(String subAddress) {
-        /// Make breadcrumbs that trace the way to this file from the root.
-        /// Searches the leaves only, which is necessary for temporal nav trees.
-    }
-
-    String toJson() {
-         var st = L<NavTree>()
-         if (this.children.size == 0) return ""
-
-         val result = StringBuilder(100)
-         stack.push(Tuple(this, 0))
-         while (stack.any()) {
-             val top = stack.peek()
-
-             if (top.second < top.first.children.size) {
-                 val next = top.first.children[top.second]
-                 if (next.children.size > 0) {
-                     result.append("[\"")
-                     result.append(next.name)
-                     result.append("\", [")
-                     stack.push(Tuple(next, 0))
-                 } else {
-                     result.append("[\"")
-                     result.append(next.name)
-                     if (top.second == top.first.children.size - 1) {
-                         result.append("\", [] ] ")
-                     } else {
-                         result.append("\", [] ], ")
-                     }
-                 }
-             } else {
-                  stack.pop()
-
-                  if (stack.any()) {
-                      val parent = stack.peek()
-                      if (parent.second < parent.first.children.size) {
-                          result.append("]], ")
-                      } else {
-                          result.append("]] ")
-                      }
-                  }
-             }
-             top.second += 1
-         }
-         return result.toString()
-    }
-}
-
-
-static class DocBuild {
-    String input;
-    L<String> coreExtraScripts; // like "graph" => Ingestion object will let us find the full name
-    L<Substitution> substitutions; // "the bytes from 10 to 16 should be replaced with `a-2.png`"
-}
-
-
-static class Substitution {
-    int startByte;
-    int endByte;
-    String replacement;
-}
 
 //}}}
 //{{{ Tests
