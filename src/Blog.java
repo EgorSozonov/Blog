@@ -12,6 +12,7 @@ static final int updateFreq = 300; // seconds before the cache gets rescanned
 static final String[] fixedCoreFiles =
             { "notFound.html", "img404.png", "style.css", "blog.html", "script.js",
               "favicon.ico", "footer.html", "no.png", "yes.png", "termsOfUse.html"};
+
 static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
 //}}}
@@ -22,8 +23,11 @@ String[] fixedVersions; // the new full names of all the fixed core files
 Map<String, String> extraVersions; // the new full names of the extra core scripts
 // Entries are like "graph" => "graph-3.js"
 
-static final String datesTemplate =
-    "<!-- Dates --><div>Created: $created, updated: $updated</div><!-- / -->";
+
+static final String datesOpen = "<!-- Dates -->";
+static final String datesClose = "<!-- / -->";
+static final String datesTemplate = "<div>Created: $created, updated: $updated</div>";
+
 
 public Blog(FileSys fs)  {
     this.fs = fs;
@@ -99,6 +103,30 @@ Ingestion buildIngestion() {
     }
 }
 
+
+static String buildDocument(String old, Instant newModified, String newContent) {
+    if (old == "" && newContent == "") {
+        throw new RuntimeException("Can't build a document with no inputs!");
+    }
+    var result = new StringBuilder();
+    String mainSource = (newContent != "") ? newContent : old;
+    String createdDate = "";
+    if (old == "") {
+        createdDate = formatter.format(newModified);
+    } else {
+        createdDate = parseCreatedDate(old);
+    }
+    return result.toString();
+}
+
+static String parseCreatedDate(String old) {
+    /// Parses the created date from the old document
+    int indStart = old.indexOf(datesOpen);
+    int indEnd = old.indexOf(datesClose);
+    String datePart = old.substring(indStart + datesOpen.length, datesClose);
+    return datePart.substring(14, 24); // Skipping length of `<div>Created: `
+}
+
 void createNewDocs(Ingestion ing) {
 
 }
@@ -116,6 +144,10 @@ static String convertToTargetDir(String ingestDir) {
     /// Changes an ingestion dir like "a.b.foo" to the nested subfolder "a/b/foo"
     return Paths.get(ingestDir.split(".").replace(" ", "")).toString();
 }
+
+
+
+
 
 //}}}
 //{{{ Ingestion
@@ -262,6 +294,17 @@ static class Substitution {
 
 //}}}
 //{{{ Filesys
+
+static class FileInfo {
+    String name;
+    Instant modified;
+
+    public FileInfo(String name, Instant modif)  {
+        this.name = name;
+        this.modified = modif;
+    }
+}
+
 interface FileSys {
     boolean dirExists(String dir);
     L<FileInfo> listFiles(String dir);
@@ -275,5 +318,6 @@ interface FileSys {
     boolean deleteIfExists(String dir, String fN);
     L<String> getNamesWithPrefix(String dir, String prefix);
 }
+
 //}}}
 }
