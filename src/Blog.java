@@ -44,7 +44,7 @@ static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-
 //{{{ Blog
 
 FileSys fs;
-String[] fixedVersions; // the new full names of all the fixed core files
+String[] coreVersions; // the new full names of all the fixed core files
 Map<String, String> globalVersions; // the new full names of the extra global scripts
                                     // Entries are like "graph" => "graph-3.js"
 
@@ -54,8 +54,8 @@ static final String stampTemplate = "<div>Created: $created, updated: $updated</
 
 public Blog(FileSys fs)  {
     this.fs = fs;
-    fixedVersions = new String[fixedCoreFiles.length];
-    extraVersions = new HashMap<String, String>();
+    coreVersions = new String[fixedCoreFiles.length];
+    globalVersions = new HashMap<String, String>();
 }
 
 void ingestCore() {
@@ -75,7 +75,7 @@ void ingestCore() {
 
         if (indFixed > -1) {
             String newVersionOfFixed = fs.moveFileToNewVersion(dir, fN, blogDir);
-            fixedVersions[indFixed] = newVersionOfFixed;
+            coreVersions[indFixed] = newVersionOfFixed;
         } else if (fN.endsWith(".js")) {
             String newVersionOfExtra = fs.moveFileToNewVersion(dir, fN, blogDir);
             globalVersions.put(shaveOffExtension(fN), newVersionOfExtra);
@@ -110,18 +110,19 @@ Ingestion buildIngestion() {
             .forEach(x -> {
                 oldDirs.add(x.toString());
             });
+    } catch (Exception e) {
+        System.out.println(e.getMessage());
     }
 
-    L<FileInfo> ingestDirs = fs.listFiles(ingestDir);
-    L<String> targetDirs = ingestDirs.trans(x -> convertToTargetDir(x.name));
+    L<String> ingestDirs = fs.listDirs(ingestDir);
+    L<String> targetDirs = ingestDirs.trans(x -> convertToTargetDir(x));
     for (int i = 0; i < ingestDirs.size(); i++) {
-        String inSourceDir = ingestDirs.get(i).name;
+        String inSourceDir = ingestDirs.get(i);
         String inTargetDir = targetDirs.get(i);
         String newContent = "";
-
+        var inFiles = fs.listFiles(Paths.get(ingestDir, inSourceDir).toString());
         int mbIndex = inFiles.findIndex(x -> x.name.equals("i.html"));
         if (oldDirs.contains(inTargetDir)) {
-            var inFiles = fs.listFiles(Paths.get(ingestDir, ingestDirs.get(i).name).toString());
             String oldContent = fs.readTextFile(inTargetDir, "i.html");
 
             if (mbIndex > -1) {
@@ -132,14 +133,14 @@ Ingestion buildIngestion() {
                     continue;
                 }
             }
-            String updatedContent = buildDocument(oldContent, todayDt, newContent);
+            //String updatedContent = buildDocument(oldContent, todayDt, newContent);
             updateDirs.add(new CreateUpdate(inSourceDir, inTargetDir));
-            allDirs.add(new Doc(inTargetDir, updatedContent,
+            allDirs.add(new Doc(inTargetDir,
                         parseCreatedDate(oldContent), todayDt));
         } else if (mbIndex > -1) {
-            String freshContent = buildDocument("", todayDt, newContent);
+            //String freshContent = buildDocument("", todayDt, newContent);
             createDirs.add(new CreateUpdate(inSourceDir, inTargetDir));
-            allDirs.add(new Doc(inTargetDir, freshContent, todayDt, ""));
+            allDirs.add(new Doc(inTargetDir, todayDt, ""));
         }
     }
     return new Ingestion(createDirs, updateDirs, deleteDirs, allDirs);
@@ -150,7 +151,7 @@ String buildDocument(String old, String updatedDt, String newContent) {
         throw new RuntimeException("Can't build a document with no inputs!");
     }
     String mainSource = (newContent != "") ? newContent : old;
-    String createdDate = "";
+    String createdDt = "";
     if (old == "") {
         createdDt = updatedDt;
     } else {
@@ -164,12 +165,20 @@ String buildDocument(String old, String updatedDt, String newContent) {
     L<Substitution> subs = parseBodySubstitutions(mainSource, dateStamp);
 
     var result = new StringBuilder();
-    buildHead(hasLocalScript, globalCoreScripts, result);
-    buildBody(old, subs, result);
+    buildHead(hasLocalScript, globalScripts, result);
+    buildBody(mainSource, subs, result);
     return result.toString();
 }
 
-static String buildDateStamp(createdDt, updatedDt) {
+static void buildHead(boolean hasLocalScript, L<String> globalScripts, StringBuilder result) {
+
+}
+
+
+static void buildBody(String html, L<Substitution> subs, StringBuilder result) {
+}
+
+static String buildDateStamp(String createdDt, String updatedDt) {
     return stampOpen
         + stampTemplate.replace("$created", createdDt).replace("$updated", updatedDt)
         + stampClose;
@@ -182,12 +191,12 @@ static boolean parseHead(String old, /* out */ L<String> globalCoreScripts) {
     int start = old.indexOf("<head>");
     int end = old.indexOf("</head>");
     String head = old.substring(start + 6, end);
-    L<String> scripts = parseSrcAttribs(head, "script")
+    L<String> scripts = parseSrcAttribs(head, "script");
     for (String scrName : scripts) {
         if (!scrName.endsWith(".js")) {
             throw new RuntimeException("Script extension must be .js!");
         }
-        if (scrName.startsWith("../") {
+        if (scrName.startsWith("../")) {
             globalCoreScripts.add(shaveOffExtension(scrName.substring(3))); // 3 for the `../`
         } else if (scrName.equals("local.js")) {
             hasLocal = true;
@@ -202,8 +211,8 @@ static boolean parseHead(String old, /* out */ L<String> globalCoreScripts) {
 static L<Substitution> parseBodySubstitutions(String mainSource, String dateStamp) {
     /// Produces a list of substitutions sorted by start byte.
     L<Substitution> result = new L();
-    int start = old.indexOf("<body>") + 6; // +6 for the length of `<body>`
-    int end = old.indexOf("</body>");
+    int start = mainSource.indexOf("<body>") + 6; // +6 for the length of `<body>`
+    int end = mainSource.indexOf("</body>");
     String body = mainSource.substring(start, end);
 
     // the date stamp
@@ -212,7 +221,7 @@ static L<Substitution> parseBodySubstitutions(String mainSource, String dateStam
         result.add(new Substitution(start, start, dateStamp));
     } else {
         int indStampClose = body.indexOf(stampClose);
-        result.add(new Substitution(indStampOpen, indStampClose + stampClose.length, dateStamp));
+        result.add(new Substitution(indStampOpen, indStampClose + stampClose.length(), dateStamp));
     }
     return result;
 }
@@ -439,17 +448,21 @@ static class NavTree {
     }
 }
 
+
 static class DocBuild {
     String input;
-    L<String> coreExtraScripts; // like "graph" => Ingestion object will let us find the full name
+    L<String> globalScripts; // like "graph" => Ingestion object will let us find the full name
     L<Substitution> substitutions; // "the bytes from 10 to 16 should be replaced with `a-2.png`"
+    DocBuild(String input, L<String> globalScripts, L<Substitution> substitution) {
+        this.input = input;
+        this.globalScripts = globalScripts;
+        this.substitutions = substitutions;
+    }
 }
 
-static class Substitution {
-    int startByte;
-    int endByte;
-    String replacement;
-}
+
+record Substitution(int startByte, int endByte, String replacement) {}
+
 
 //}}}
 //{{{ Filesys
@@ -479,4 +492,5 @@ interface FileSys {
 }
 
 //}}}
+
 }
