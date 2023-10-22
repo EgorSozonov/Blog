@@ -45,15 +45,12 @@ static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-
 
 FileSys fs;
 String[] fixedVersions; // the new full names of all the fixed core files
-Map<String, String> extraVersions; // the new full names of the extra core scripts
-                                   // Entries are like "graph" => "graph-3.js"
+Map<String, String> globalVersions; // the new full names of the extra global scripts
+                                    // Entries are like "graph" => "graph-3.js"
 
-
-static final String datesOpen = "<!-- Dates -->";
-static final String datesClose = "<!-- / -->";
-static final String datesTemplate = "<div>Created: $created, updated: $updated</div>";
-
-
+static final String stampOpen = "<!-- Dates -->";
+static final String stampClose = "<!-- / -->";
+static final String stampTemplate = "<div>Created: $created, updated: $updated</div>";
 
 public Blog(FileSys fs)  {
     this.fs = fs;
@@ -81,7 +78,8 @@ void ingestCore() {
             fixedVersions[indFixed] = newVersionOfFixed;
         } else if (fN.endsWith(".js")) {
             String newVersionOfExtra = fs.moveFileToNewVersion(dir, fN, blogDir);
-            extraVersions.put(shaveOffExtension(fN), newVersionOfExtra);
+            globalVersions.put(shaveOffExtension(fN), newVersionOfExtra);
+
         }
     }
 }
@@ -99,7 +97,6 @@ void ingestDocs() {
     updateDocs(ing);
     deleteDocs(ing);
 }
-
 
 Ingestion buildIngestion() {
     L<CreateUpdate> createDirs = new L();
@@ -148,30 +145,103 @@ Ingestion buildIngestion() {
     return new Ingestion(createDirs, updateDirs, deleteDirs, allDirs);
 }
 
-
 String buildDocument(String old, String updatedDt, String newContent) {
     if (old == "" && newContent == "") {
         throw new RuntimeException("Can't build a document with no inputs!");
     }
-    var result = new StringBuilder();
     String mainSource = (newContent != "") ? newContent : old;
     String createdDate = "";
     if (old == "") {
-        createdDate = updatedDt;
+        createdDt = updatedDt;
     } else {
-        createdDate = parseCreatedDate(old);
+        createdDt = parseCreatedDate(old);
     }
 
+    String dateStamp = buildDateStamp(createdDt, updatedDt);
+
+    L<String> globalScripts = new L();
+    boolean hasLocalScript = parseHead(mainSource, globalScripts);
+    L<Substitution> subs = parseBodySubstitutions(mainSource, dateStamp);
+
+    var result = new StringBuilder();
+    buildHead(hasLocalScript, globalCoreScripts, result);
+    buildBody(old, subs, result);
     return result.toString();
 }
 
+static String buildDateStamp(createdDt, updatedDt) {
+    return stampOpen
+        + stampTemplate.replace("$created", createdDt).replace("$updated", updatedDt)
+        + stampClose;
+}
+
+static boolean parseHead(String old, /* out */ L<String> globalCoreScripts) {
+    /// Parses the <head> tag of the old HTML and determines if it has the local script "local.js"
+    /// as well as the list of core extra scripts this document requires
+    boolean hasLocal = false;
+    int start = old.indexOf("<head>");
+    int end = old.indexOf("</head>");
+    String head = old.substring(start + 6, end);
+    L<String> scripts = parseSrcAttribs(head, "script")
+    for (String scrName : scripts) {
+        if (!scrName.endsWith(".js")) {
+            throw new RuntimeException("Script extension must be .js!");
+        }
+        if (scrName.startsWith("../") {
+            globalCoreScripts.add(shaveOffExtension(scrName.substring(3))); // 3 for the `../`
+        } else if (scrName.equals("local.js")) {
+            hasLocal = true;
+        } else {
+            throw new
+                RuntimeException("Scripts must either start with `../` or be named `local.js`!");
+        }
+    }
+    return hasLocal;
+}
+
+static L<Substitution> parseBodySubstitutions(String mainSource, String dateStamp) {
+    /// Produces a list of substitutions sorted by start byte.
+    L<Substitution> result = new L();
+    int start = old.indexOf("<body>") + 6; // +6 for the length of `<body>`
+    int end = old.indexOf("</body>");
+    String body = mainSource.substring(start, end);
+
+    // the date stamp
+    int indStampOpen = body.indexOf(stampOpen);
+    if (indStampOpen == -1) { // A new doc being created
+        result.add(new Substitution(start, start, dateStamp));
+    } else {
+        int indStampClose = body.indexOf(stampClose);
+        result.add(new Substitution(indStampOpen, indStampClose + stampClose.length, dateStamp));
+    }
+    return result;
+}
+
+static L<String> parseSrcAttribs(String html, String tag) {
+    /// (`<foo src="asdf">` `foo`) => `asdf`
+    L<String> result = new L();
+    String opener = "<" + tag;
+    int ind = html.indexOf(opener);
+    while (ind > -1) {
+        int indClose = html.indexOf(">", ind);
+        if (indClose == -1) {
+            throw new RuntimeException("Unclosed tag in the HTML");
+        }
+        int indSrc = html.indexOf("src=\"", ind) + 5;
+        int indEndSrc = html.indexOf("\"", indSrc); // 5 for the `src="`
+        String attrib = html.substring(indSrc, indEndSrc);
+        result.add(attrib);
+        ind = html.indexOf(opener);
+    }
+    return result;
+}
 
 static String parseCreatedDate(String old) {
     /// Parses the created date from the old document
-    int indStart = old.indexOf(datesOpen);
-    int indEnd = old.indexOf(datesClose);
-    int indDateStart = indStart + datesOpen.length();
-    String datePart = old.substring(indDateStart, indDateStart + datesClose.length());
+    int indStart = old.indexOf(stampOpen);
+    int indEnd = old.indexOf(stampClose);
+    int indDateStart = indStart + stampOpen.length();
+    String datePart = old.substring(indDateStart, indDateStart + stampClose.length());
     return datePart.substring(14, 24); // Skipping length of `<div>Created: `
 }
 
@@ -183,7 +253,6 @@ void updateDocs(Ingestion ing) {
 
 }
 
-
 void deleteDocs(Ingestion ing) {
 
 }
@@ -194,13 +263,8 @@ static String convertToTargetDir(String ingestDir) {
     return Paths.get(dirParts).toString();
 }
 
-
-
-
-
 //}}}
 //{{{ Ingestion
-
 
 static class Ingestion {
     L<CreateUpdate> createDocs;
@@ -208,7 +272,6 @@ static class Ingestion {
     L<String> deleteDocs; // list of dirs like `a/b/c`
     L<Doc> allDocs; // list of dirs like `a/b/c`
     NavTree thematic;
-    NavTree temporal;
 
     public Ingestion(L<CreateUpdate> createDirs, L<CreateUpdate> updateDirs, L<String> deleteDirs,
                      L<Doc> allDirs) {
@@ -217,9 +280,7 @@ static class Ingestion {
         this.deleteDocs = deleteDirs;
         this.allDocs = allDirs;
         this.thematic = buildThematic(allDirs);
-        this.temporal = buildTemporal(allDirs);
     }
-
 
     NavTree buildThematic(L<Doc> allDirs) {
         Collections.sort(allDirs, (x, y) ->{
@@ -264,42 +325,7 @@ static class Ingestion {
         }
         return root;
     }
-
-
-    NavTree buildTemporal(L<Doc> allDirs) {
-        Collections.sort(allDirs, (x, y) -> x.createdDate.compareTo(y.createdDate));
-        var docsByDate = allDirs;
-        var st = new L<NavTree>();
-        var root = new NavTree("", new L<NavTree>());
-        st.add(root);
-
-        for (int i = 0; i < docsByDate.size(); i++) {
-            Doc doc = docsByDate.get(i);
-            var spl = doc.spl;
-            String yearName = doc.createdDate.substring(0, 4);
-            String monthName = monthNameOf(doc.createdDate);
-
-            int lenSamePrefix = Math.min(st.size() - 1, 2) - 1;
-
-            if (lenSamePrefix > -1 && yearName != st.get(1).name) lenSamePrefix = -1;
-            if (lenSamePrefix > 0 && monthName != st.get(2).name) lenSamePrefix = 0;
-            for (int j = lenSamePrefix + 1; j < 3; j++) {
-                String name = (j == 2 ? doc.spl.last() : (j == 1 ? monthName : yearName));
-
-                var newElem = new NavTree(spl.get(j), new L());
-                if (j + 1 < st.size())  {
-                    st.set(j + 1, newElem);
-                } else {
-                    st.add(newElem);
-                }
-                var prev = st.get(j);
-                prev.children.add(newElem);
-            }
-        }
-        return root;
-    }
 }
-
 
 static class CreateUpdate {
     String sourceDir; // source dir like `a.b.c`
@@ -320,7 +346,6 @@ static class CreateUpdate {
         localVersions = new HashMap();
     }
 }
-
 
 static class Doc {
     String dir;
@@ -343,7 +368,6 @@ static class Doc {
 
     }
 }
-
 
 static class NavTree {
     String name;
@@ -415,13 +439,11 @@ static class NavTree {
     }
 }
 
-
 static class DocBuild {
     String input;
     L<String> coreExtraScripts; // like "graph" => Ingestion object will let us find the full name
     L<Substitution> substitutions; // "the bytes from 10 to 16 should be replaced with `a-2.png`"
 }
-
 
 static class Substitution {
     int startByte;
