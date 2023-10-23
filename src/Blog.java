@@ -171,7 +171,18 @@ String buildDocument(String old, String updatedDt, String newContent) {
 }
 
 static void buildHead(boolean hasLocalScript, L<String> globalScripts, StringBuilder result) {
-
+    result.append(template0);
+    result.append("<script type=\"text/javascript\" src=\"/blog/script.js\"></script>\n");
+    for (String gs : globalScripts) {
+        if (globalCoreScripts.containsKey(gs)) {
+            result.append("<script type=\"text/javascript\" src=\"/blog/"
+                    + globalCoreScripts.get(gs) + "\"></script>\n");
+        }
+    }
+    if (hasLocalScript) {
+        result.append("<script type=\"text/javascript\" src=\"/blog/local.js\"></script>\n");
+    }
+    result.append("</head>\n");
 }
 
 
@@ -492,5 +503,72 @@ interface FileSys {
 }
 
 //}}}
+//{{{ Templates
 
+static final String template0 = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; base-uri 'self';" />
+""";
+
+
+static final String templateHeadCloseBodyStart = """
+<body>
+    <div class="__wrapper">
+        <div class="__navbar" id="_theNavBar">
+            <div class="__menuTop">
+                <div class="__svgButton" title="Temporal sorting">
+                    <a id="_reorderTemporal" title="Temporal sorting">
+                        <svg id="_sorterTemp" class="__swell" width="30" height="30"
+                            viewBox="0 0 100 100">
+                            <circle r="48" cx="50" cy="50" />
+                            <path d="M 35 20 h 30 c 0 30 -30 30 -30 60 h 30
+                                     c 0 -30 -30 -30 -30 -60" />
+                        </svg>
+                    </a>
+                </div>
+                <div class="__svgButton">
+                    <a href="http://sozonov.site" title="Home page">
+                        <svg id="__homeIcon" class="__swell" width="30" height="30"
+                         viewBox="0 0 100 100">
+                            <circle r="48" cx="50" cy="50" />
+                            <path d="M 30 45 h 40 v 25 h -40 v -25 " />
+                            <path d="M 22 50 l 28 -25 l 28 25" />
+                        </svg>
+                    </a>
+                </div>
+            </div>
+            <div class="__menu" id="__theMenu"></div>
+        </div>
+
+        <div class="__divider" id="_divider">&lt;</div>
+        <div class="__menuToggler __hidden" id="_menuToggler">
+            <div class="__svgButton" title="Open menu">
+                    <a id="_toggleNavBar">
+                        <svg class="__swell" width="30" height="30" viewBox="0 0 100 100">
+                            <circle r="48" cx="50" cy="50"></circle>
+                            <path d="M 30 35 h 40" stroke-width="6"></path>
+                            <path d="M 30 50 h 40" stroke-width="6"></path>
+                            <path d="M 30 65 h 40" stroke-width="6"></path>
+                        </svg>
+                    </a>
+            </div>
+        </div>
+
+
+        <div class="__content">
+""";
+
+
+
+static final String template4 = """
+        </div>
+    </div>
+</body>
+</html>
+""";
+
+//}}}
 }
