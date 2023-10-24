@@ -47,6 +47,7 @@ FileSys fs;
 String[] coreVersions; // the new full names of all the fixed core files
 Map<String, String> globalVersions; // the new full names of the extra global scripts
                                     // Entries are like "graph" => "graph-3.js"
+String todayDt = "";
 
 static final String stampOpen = "<!-- Dates -->";
 static final String stampClose = "<!-- / -->";
@@ -56,6 +57,7 @@ public Blog(FileSys fs)  {
     this.fs = fs;
     coreVersions = new String[fixedCoreFiles.length];
     globalVersions = new HashMap<String, String>();
+    todayDt = formatter.format(Instant.now());
 }
 
 void ingestCore() {
@@ -102,17 +104,8 @@ Ingestion buildIngestion() {
     L<CreateUpdate> createDirs = new L();
     L<CreateUpdate> updateDirs = new L();
     L<String> deleteDirs = new L();
-    L<Doc> allDirs = new L();
-    Set<String> oldDirs = new HashSet();
-    String todayDt = formatter.format(Instant.now());
-    try (Stream<Path> walk = Files.walk(Paths.get(blogDir))) {
-        walk.filter(Files::isDirectory)
-            .forEach(x -> {
-                oldDirs.add(x.toString());
-            });
-    } catch (Exception e) {
-        System.out.println(e.getMessage());
-    }
+    L<Doc> allDocs = new L();
+    Set<String> oldDirs = fs.listSubfoldersContaining(blogDir, "i.html").toSet();
 
     L<String> ingestDirs = fs.listDirs(ingestDir);
     L<String> targetDirs = ingestDirs.trans(x -> convertToTargetDir(x));
@@ -123,28 +116,25 @@ Ingestion buildIngestion() {
         var inFiles = fs.listFiles(Paths.get(ingestDir, inSourceDir).toString());
         int mbIndex = inFiles.findIndex(x -> x.name.equals("i.html"));
         if (oldDirs.contains(inTargetDir)) {
-            String oldContent = fs.readTextFile(inTargetDir, "i.html");
 
             if (mbIndex > -1) {
                 newContent = fs.readTextFile(inSourceDir, "i.html");
                 if (newContent.length() <= 1) {
-                    // a 0 or 1 byte-long i.html means "delete this document"
+                    // a 0- or 1-byte long i.html means "delete this document"
                     deleteDirs.add(inTargetDir);
                     continue;
                 }
             }
-            //String updatedContent = buildDocument(oldContent, todayDt, newContent);
             updateDirs.add(new CreateUpdate(inSourceDir, inTargetDir));
-            allDirs.add(new Doc(inTargetDir,
-                        parseCreatedDate(oldContent), todayDt));
+            allDocs.add(new Doc(inTargetDir));
         } else if (mbIndex > -1) {
-            //String freshContent = buildDocument("", todayDt, newContent);
             createDirs.add(new CreateUpdate(inSourceDir, inTargetDir));
-            allDirs.add(new Doc(inTargetDir, todayDt, ""));
+            allDirs.add(new Doc(inTargetDir));
         }
     }
     return new Ingestion(createDirs, updateDirs, deleteDirs, allDirs);
 }
+
 
 String buildDocument(String old, String updatedDt, String newContent) {
     if (old == "" && newContent == "") {
@@ -170,13 +160,14 @@ String buildDocument(String old, String updatedDt, String newContent) {
     return result.toString();
 }
 
-static void buildHead(boolean hasLocalScript, L<String> globalScripts, StringBuilder result) {
+
+void buildHead(boolean hasLocalScript, L<String> globalScripts, StringBuilder result) {
     result.append(template0);
     result.append("<script type=\"text/javascript\" src=\"/blog/script.js\"></script>\n");
     for (String gs : globalScripts) {
-        if (globalCoreScripts.containsKey(gs)) {
+        if (globalVersions.containsKey(gs)) {
             result.append("<script type=\"text/javascript\" src=\"/blog/"
-                    + globalCoreScripts.get(gs) + "\"></script>\n");
+                    + globalVersions.get(gs) + "\"></script>\n");
         }
     }
     if (hasLocalScript) {
@@ -187,13 +178,22 @@ static void buildHead(boolean hasLocalScript, L<String> globalScripts, StringBui
 
 
 static void buildBody(String html, L<Substitution> subs, StringBuilder result) {
+    int curr = html.indexOf("<body>");
+    for (var sub : subs) {
+        result.append(html.substring(curr, sub.startByte));
+        result.append(sub.replacement);
+        curr = sub.endByte;
+    }
+    result.append(html.substring(curr, html.length()));
 }
+
 
 static String buildDateStamp(String createdDt, String updatedDt) {
     return stampOpen
         + stampTemplate.replace("$created", createdDt).replace("$updated", updatedDt)
         + stampClose;
 }
+
 
 static boolean parseHead(String old, /* out */ L<String> globalCoreScripts) {
     /// Parses the <head> tag of the old HTML and determines if it has the local script "local.js"
@@ -218,6 +218,7 @@ static boolean parseHead(String old, /* out */ L<String> globalCoreScripts) {
     }
     return hasLocal;
 }
+
 
 static L<Substitution> parseBodySubstitutions(String mainSource, String dateStamp) {
     /// Produces a list of substitutions sorted by start byte.
@@ -267,14 +268,21 @@ static String parseCreatedDate(String old) {
 
 void createNewDocs(Ingestion ing) {
 
+    String freshContent = buildDocument("", todayDt, newContent);
 }
 
 void updateDocs(Ingestion ing) {
+    for (CreateUpdate upd : ing.updateDocs) {
 
+        String oldContent = fs.readTextFile(upd.targetDir, "i.html");
+        String updatedContent = buildDocument(oldContent, todayDt, upd.newContent);
+    }
 }
 
 void deleteDocs(Ingestion ing) {
-
+    for (String toDel : ing.deleteDocs) {
+        fs.deleteDirIfExists(toDel);
+    }
 }
 
 static String convertToTargetDir(String ingestDir) {
@@ -290,8 +298,8 @@ static class Ingestion {
     L<CreateUpdate> createDocs;
     L<CreateUpdate> updateDocs;
     L<String> deleteDocs; // list of dirs like `a/b/c`
-    L<Doc> allDocs; // list of dirs like `a/b/c`
-    NavTree thematic;
+    L<Doc> allDocs;
+    NavTree nav;
 
     public Ingestion(L<CreateUpdate> createDirs, L<CreateUpdate> updateDirs, L<String> deleteDirs,
                      L<Doc> allDirs) {
@@ -299,7 +307,7 @@ static class Ingestion {
         this.updateDocs = updateDirs;
         this.deleteDocs = deleteDirs;
         this.allDocs = allDirs;
-        this.thematic = buildThematic(allDirs);
+        this.nav = buildThematic(allDirs);
     }
 
     NavTree buildThematic(L<Doc> allDirs) {
@@ -352,6 +360,7 @@ static class CreateUpdate {
     String targetDir; // target dir like `a/b/c`
     String newContent; // content of the new "i.html" file, if it's present
     Map<String, String> localVersions; // map from prefix to full filename for local files
+
     public CreateUpdate(String sourceDir, String targetDir)  {
         this.sourceDir = sourceDir;
         this.targetDir = targetDir;
@@ -367,27 +376,17 @@ static class CreateUpdate {
     }
 }
 
+
 static class Doc {
-    String dir;
-    String createdDate;
-    String updatedDate;
+    String targetDir;
     L<String> spl;
 
-    public Doc(String dir, String createdDate, String updatedDate) {
-        this.dir = dir;
-        this.createdDate = createdDate;
-        this.updatedDate = updatedDate;
+    public Doc(String targetDir) {
+        this.targetDir = targetDir;
         this.spl = L.of(dir.split("/"));
     }
-
-    static void ofNew() {
-
-    }
-
-    static void ofUpdate() {
-
-    }
 }
+
 
 static class NavTree {
     String name;
@@ -400,17 +399,8 @@ static class NavTree {
         this.currInd = 0;
     }
 
-    static int[] createBreadcrumbsThematic(String subAddress) {
+    static int[] createBreadcrumbs(String subAddress) {
         /// Make breadcrumbs that trace the way to this file from the root.
-        /// Attempts to follow the spine, but this doesn't work for temporal nav trees, so in case
-        /// of an element not found it switches to the slow version (which searches through
-        /// all the leaves).
-        return null;
-    }
-
-    static int[] createBreadcrumbsTemporal(String subAddress) {
-        /// Make breadcrumbs that trace the way to this file from the root.
-        /// Searches the leaves only, which is necessary for temporal nav trees.
         return null;
     }
 
@@ -462,7 +452,7 @@ static class NavTree {
 
 static class DocBuild {
     String input;
-    L<String> globalScripts; // like "graph" => Ingestion object will let us find the full name
+    L<String> globalScripts; // like "graph". Ingestion object will let us find the full name
     L<Substitution> substitutions; // "the bytes from 10 to 16 should be replaced with `a-2.png`"
     DocBuild(String input, L<String> globalScripts, L<Substitution> substitution) {
         this.input = input;
@@ -490,8 +480,9 @@ static class FileInfo {
 
 interface FileSys {
     boolean dirExists(String dir);
-    L<FileInfo> listFiles(String dir);
-    L<String> listDirs(String dir);
+    L<FileInfo> listFiles(String dir); // immediate files in a dir
+    L<String> listDirs(String dir); // immediate children dirs
+    L<String> listSubfoldersContaining(String dir, String fN); // recursively list all nested dirs
     String readTextFile(String dir, String fN);
     L<String> getDirsContainingFile(String fN);
     boolean createDir(String dir);
@@ -499,8 +490,20 @@ interface FileSys {
     boolean moveFile(String dir, String fN, String targetDir);
     String moveFileToNewVersion(String dir, String fN, String targetDir);
     boolean deleteIfExists(String dir, String fN);
+    boolean deleteDirIfExists(String dir);
     L<String> getNamesWithPrefix(String dir, String prefix);
 }
+
+
+// Implementation
+//~    try (Stream<Path> walk = Files.walk(Paths.get(blogDir))) {
+//~        walk.filter(Files::isDirectory)
+//~            .forEach(x -> {
+//~                oldDirs.add(x.toString());
+//~            });
+//~    } catch (Exception e) {
+//~        System.out.println(e.getMessage());
+//~    }
 
 //}}}
 //{{{ Templates

@@ -34,7 +34,7 @@ interface Printer {
 //}}}
 //{{{ List
 
-static class L<T> implements List<T> {
+static final class L<T> implements List<T> {
     private static final int DEFAULT_CAPACITY = 10;
     private int size;
     private int modCount = 0;
@@ -392,11 +392,20 @@ static class L<T> implements List<T> {
             expectedModCount++;
         }
 
-        final void checkForComodification() {
+        void checkForComodification() {
             if (lst.modCount != expectedModCount) {
                 throw new RuntimeException();
             }
         }
+        
+        public Set<T> toSet() {
+            Set<T> result = new HashSet<T>();
+            for (int i = 0; i < size; ++i) {
+                result.add(data[i]);
+            }
+            return result;
+        }
+        
     }
 }
 
