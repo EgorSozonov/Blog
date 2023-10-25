@@ -22,6 +22,7 @@ import java.nio.file.Paths;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
 import static tech.sozonov.blog.Utils.*;
+
 //}}}
 
 class Blog {
@@ -129,10 +130,10 @@ Ingestion buildIngestion() {
             allDocs.add(new Doc(inTargetDir));
         } else if (mbIndex > -1) {
             createDirs.add(new CreateUpdate(inSourceDir, inTargetDir));
-            allDirs.add(new Doc(inTargetDir));
+            allDocs.add(new Doc(inTargetDir));
         }
     }
-    return new Ingestion(createDirs, updateDirs, deleteDirs, allDirs);
+    return new Ingestion(createDirs, updateDirs, deleteDirs, allDocs);
 }
 
 
@@ -267,8 +268,9 @@ static String parseCreatedDate(String old) {
 }
 
 void createNewDocs(Ingestion ing) {
-
-    String freshContent = buildDocument("", todayDt, newContent);
+    for (CreateUpdate cre : ing.createDocs) {
+        String freshContent = buildDocument("", todayDt, cre.newContent);
+    } 
 }
 
 void updateDocs(Ingestion ing) {
@@ -303,6 +305,10 @@ static class Ingestion {
 
     public Ingestion(L<CreateUpdate> createDirs, L<CreateUpdate> updateDirs, L<String> deleteDirs,
                      L<Doc> allDirs) {
+                     
+        print("Ingestion constructor, count of create " + createDocs.size()
+                + ", updateDocs count = " + updateDocs.size() + ", deleteDocs count = " 
+                + deleteDocs.size() + ", allDirs = " + allDocs.size()); 
         this.createDocs = createDirs;
         this.updateDocs = updateDirs;
         this.deleteDocs = deleteDirs;
@@ -311,6 +317,7 @@ static class Ingestion {
     }
 
     NavTree buildThematic(L<Doc> allDirs) {
+        print("BuildThematic, count of allDirs " + allDirs.size()); 
         Collections.sort(allDirs, (x, y) ->{
             int folderLengthCommon = Math.min(x.spl.size(), y.spl.size());
             for (int i = 0; i < folderLengthCommon; i++) {
@@ -340,7 +347,7 @@ static class Ingestion {
             }
             for (int j = lenSamePrefix + 1; j < spl.size(); j++) {
                 var newElem = (j == spl.size() - 1)
-                                ? new NavTree(docsByName.get(i).dir, new L())
+                                ? new NavTree(docsByName.get(i).targetDir, new L())
                                 : new NavTree(spl.get(j), new L());
                 if (j + 1 < st.size())  {
                     st.set(j + 1, newElem);
@@ -383,7 +390,7 @@ static class Doc {
 
     public Doc(String targetDir) {
         this.targetDir = targetDir;
-        this.spl = L.of(dir.split("/"));
+        this.spl = L.of(targetDir.split("/"));
     }
 }
 

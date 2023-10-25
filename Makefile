@@ -35,7 +35,7 @@ _bin/test: | _bin
 
 test: ## Run unit tests
 / echo 'testing'
-/ java test/test.java
+/ java -cp $(BUILDDIR) test/Test.java
 
 
 

@@ -16,6 +16,8 @@ import java.util.function.Function;
 import java.lang.reflect.Array;
 import java.nio.file.Paths;
 import java.nio.file.Files;
+import java.time.format.DateTimeFormatter;
+import static tech.sozonov.blog.Utils.*;
 
 //}}}
 
@@ -49,6 +51,12 @@ static class MockFileSys implements FileSys {
             int indSlash = x.indexOf("/");
             return indSlash < 0 ? x : x.substring(0, indSlash);
         }).toList();
+    }
+    
+    @Override
+
+    public L<String> listSubfoldersContaining(String dir, String fN) {
+        
     }
 
     @Override
@@ -347,14 +355,14 @@ static void updateCore() {
     var coreNames = fs.listFiles(blogDir).trans(x -> x.name);
     assertArrsEqual(coreNames,
             L.of("termsOfUse.html", "termsOfUse-2.html", "img404.png"));
-    int indInFixed = findIndex(fixedCoreFiles, x -> x.equals("termsOfUse.html"));
-    blAssert(b.fixedVersions[indInFixed].equals("termsOfUse-2.html"));
+    int indInFixed = findIndex(b.coreVersions, x -> x.equals("termsOfUse.html"));
+    blAssert(b.coreVersions[indInFixed].equals("termsOfUse-2.html"));
 }
 
 static void parseDate() {
     String input = "<!-- Dates --><div>Created: 2023-04-05, updated: 2023-04-06</div><!-- / -->";
     String dateOld = Blog.parseCreatedDate(input);
-    blAssert(dateOld.equals("2023-04-05");
+    blAssert(dateOld.equals("2023-04-05"));
 }
 
 public static void main(String[] args) {

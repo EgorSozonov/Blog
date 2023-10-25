@@ -2,7 +2,9 @@ package tech.sozonov.blog;
 //{{{ Imports
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.List;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -22,15 +24,15 @@ import java.nio.file.Files;
 class Utils {
 
 //{{{ Println
-interface Printer {
-     static <T> void printNoLn(T t) {
-         System.out.print(t);
-     }
 
-     static <T> void print(T t) {
-         System.out.println(t);
-     }
+static <T> void printNoLn(T t) {
+    System.out.print(t);
 }
+
+static <T> void print(T t) {
+    System.out.println(t);
+}
+
 //}}}
 //{{{ List
 
@@ -331,6 +333,15 @@ static final class L<T> implements List<T> {
     }
     
     
+    public Set<T> toSet() {
+        Set<T> result = new HashSet<T>();
+        for (int i = 0; i < size; ++i) {
+            result.add(data[i]);
+        }
+        return result;
+    }
+    
+    
     public static class LIterator<T> implements ListIterator<T> {
         private int i;
         private int size;
@@ -398,13 +409,6 @@ static final class L<T> implements List<T> {
             }
         }
         
-        public Set<T> toSet() {
-            Set<T> result = new HashSet<T>();
-            for (int i = 0; i < size; ++i) {
-                result.add(data[i]);
-            }
-            return result;
-        }
         
     }
 }
