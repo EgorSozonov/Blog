@@ -326,6 +326,16 @@ static final class L<T> implements List<T> {
         return Optional.empty();
     }
 
+    public boolean any(Predicate<T> pred) {
+        /// Find index of first element satisfying predicate. 
+        /// The method missing from the Java streams
+        for (int i = 0; i < size; i++) {
+            if (pred.test(data[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     public T last() {
         /// Returns the last element. Assumes the list is non-empty
@@ -414,11 +424,15 @@ static final class L<T> implements List<T> {
 }
 
 //}}}
-//{{{ Action
+//{{{ Tu
 
-@FunctionalInterface
-interface Action {
-    void run();
+static class Tu<F, S> {
+    public F f1;
+    public S f2;
+    public Tu(F f, S s) {
+        f1 = f;
+        f2 = s;
+    }
 }
 
 //}}}

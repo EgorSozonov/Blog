@@ -4,14 +4,19 @@ ifndef VERBOSE
 .SILENT: # Silent mode unless you run it like "make all VERBOSE=1"
 endif
 
-ifndef $(EXES)
-EXES = ../../exes
+ifndef EXEDIR
+EXEDIR = ../../exes
+endif
+
+ifndef DEBUGDIR
+DEBUGDIR = ../../debug
 endif
 
 .PHONY: all build clean test help binFolder
 
 APP=blog
-BUILDDIR=$(EXES)/$(APP)
+BUILDDIR=$(EXEDIR)/$(APP)
+TESTDIR=$(DEBUGDIR)/$(APP)
 
 all: $(BUILDDIR) ## Build the whole project
 / @echo "========================================="
@@ -35,7 +40,11 @@ _bin/test: | _bin
 
 test: ## Run unit tests
 / echo 'testing'
-/ java -cp $(BUILDDIR) test/Test.java
+/ echo $(TESTDIR)
+/ echo $(DEBUGDIR)
+/ javac -d '$(TESTDIR)' src/Blog.java src/Utils.java test/Test.java
+/ jar -cv -C '$(TESTDIR)' -f test.jar -e tech.sozonov.blog.Test tech/sozonov/blog/*.class
+/ java -jar $(TESTDIR)/test.jar
 
 
 

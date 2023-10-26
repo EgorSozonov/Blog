@@ -22,6 +22,7 @@ import java.nio.file.Paths;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
 import static tech.sozonov.blog.Utils.*;
+import tech.sozonov.blog.Utils.Tu;
 
 //}}}
 
@@ -83,6 +84,17 @@ void ingestCore() {
             String newVersionOfExtra = fs.moveFileToNewVersion(dir, fN, blogDir);
             globalVersions.put(shaveOffExtension(fN), newVersionOfExtra);
 
+        }
+    }
+    for (int i = 0; i < fixedCoreFiles.length; i++) {
+        if (coreVersions[i] == null) {
+            L<String> existingNames = fs.getNamesWithPrefix(blogDir, 
+                    shaveOffExtension(fixedCoreFiles[i]));
+            if (existingNames.size() == 0)  {
+                print("Error, no core fixed file found for " + fixedCoreFiles[i]);
+                return;
+            }
+            coreVersions[i] = getNameWithMaxVersion(existingNames).f1;
         }
     }
 }
@@ -239,6 +251,7 @@ static L<Substitution> parseBodySubstitutions(String mainSource, String dateStam
     return result;
 }
 
+
 static L<String> parseSrcAttribs(String html, String tag) {
     /// (`<foo src="asdf">` `foo`) => `asdf`
     L<String> result = new L();
@@ -291,6 +304,43 @@ static String convertToTargetDir(String ingestDir) {
     /// Changes an ingestion dir like "a.b.foo" to the nested subfolder "a/b/foo"
     String dirParts = ingestDir.replace(" ", "").replace(".", "/");
     return Paths.get(dirParts).toString();
+}
+
+
+static Tu<String, Integer> getNameWithMaxVersion(L<String> filenames) {
+    /// For a list like `file.txt, file-2.txt, file-3.txt`, returns 3.
+    L<String> withoutExts = filenames.trans(Utils::shaveOffExtension);
+    var versions = new L();
+    int maxVersion = 0;
+    String result = filenames.get(0); 
+    for (int i = 0; i < filenames.size(); i++) {
+        String shortName = withoutExts.get(i);
+        int indDash = shortName.lastIndexOf("-");
+        if (indDash < 0 || indDash == (shortName.length() - 1)) {
+            continue;
+        }
+        var mbNumber = parseInt(shortName.substring(indDash + 1));
+        if (mbNumber.isPresent() && maxVersion < mbNumber.get()) {
+            maxVersion = mbNumber.get();
+            result = filenames.get(i);
+        } else {
+            continue;
+        }
+    }
+    return new Tu(result, maxVersion);
+}
+
+
+static String makeNameBumpedVersion(String unversionedName, L<String> existingNames) {
+    /// `file.js` (`file-2.js` `file-3.js`) => `file-4.js`
+    if (existingNames.size() == 0) {
+        return unversionedName;
+    } else {
+        int maxExistingVersion = getNameWithMaxVersion(existingNames).f2;
+        int indLastDot = unversionedName.lastIndexOf(".");
+        return unversionedName.substring(0, indLastDot) + "-" + (maxExistingVersion + 1)
+                + unversionedName.substring(indLastDot);
+    }
 }
 
 //}}}
@@ -490,15 +540,14 @@ interface FileSys {
     L<FileInfo> listFiles(String dir); // immediate files in a dir
     L<String> listDirs(String dir); // immediate children dirs
     L<String> listSubfoldersContaining(String dir, String fN); // recursively list all nested dirs
+    L<String> getNamesWithPrefix(String dir, String prefix);
     String readTextFile(String dir, String fN);
-    L<String> getDirsContainingFile(String fN);
     boolean createDir(String dir);
     boolean saveOverwriteFile(String dir, String fN, String cont);
     boolean moveFile(String dir, String fN, String targetDir);
     String moveFileToNewVersion(String dir, String fN, String targetDir);
     boolean deleteIfExists(String dir, String fN);
     boolean deleteDirIfExists(String dir);
-    L<String> getNamesWithPrefix(String dir, String prefix);
 }
 
 

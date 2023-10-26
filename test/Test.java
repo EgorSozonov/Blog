@@ -18,6 +18,7 @@ import java.nio.file.Paths;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
 import static tech.sozonov.blog.Utils.*;
+import static tech.sozonov.blog.Blog.*;
 
 //}}}
 
@@ -56,7 +57,24 @@ static class MockFileSys implements FileSys {
     @Override
 
     public L<String> listSubfoldersContaining(String dir, String fN) {
-        
+        /// Gets the list of directories containing a filename, for example "i.html"
+        L<String> result = new L(10);
+        for (var e : fs.entrySet()) {
+            if (e.getKey().startsWith(dir) && e.getValue().any(x -> x.name.equals("i.html"))) {
+                result.add(e.getKey());
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public L<String> getNamesWithPrefix(String dir, String prefix) {
+        if (!fs.containsKey(dir)) {
+            return new L();
+        }
+        var existingFiles = fs.get(dir);
+        var tra = existingFiles.transIf(x -> x.name.startsWith(prefix), y -> y.name);
+        return tra;
     }
 
     @Override
@@ -65,18 +83,6 @@ static class MockFileSys implements FileSys {
             return "";
         }
         return fs.get(dir).first(x -> x.name.equals(fN)).map(x -> x.cont).orElse("");
-    }
-
-    @Override
-    L<String> getDirsContainingFile(String fN) {
-        /// Gets the list of directories containing a filename, for example "i.html"
-        L<String> result = new L(10);
-        for (var e : fs.entrySet()) {
-            if (e.getValue().any(x -> x.name.equals("i.html"))) {
-                result.add(e.getKey());
-            }
-        }
-        return result;
     }
 
     @Override
@@ -137,10 +143,7 @@ static class MockFileSys implements FileSys {
         if (existingWithThisPrefix.size() == 0) {
             targetFiles.add(sourceFile);
         } else {
-            int maxExistingVersion = getMaxVersion(existingWithThisPrefix);
-            int indLastDot = fN.lastIndexOf(".");
-            newName = fN.substring(0, indLastDot) + "-" + (maxExistingVersion + 1)
-                    + fN.substring(indLastDot);
+            newName = makeNameBumpedVersion(fN, existingWithThisPrefix);
             targetFiles.add(new MockFile(newName, sourceFile.cont, sourceFile.modified));
         }
         sourceFiles.remove(indexSource);
@@ -150,26 +153,28 @@ static class MockFileSys implements FileSys {
     @Override
     public boolean deleteIfExists(String dir, String fN) {
         if (!fs.containsKey(dir)) {
-            return true;
+            return false;
         }
         var existingFiles = fs.get(dir);
         int indexExisting = existingFiles.findIndex(x -> x.name.equals(fN));
         if (indexExisting > -1) {
             existingFiles.remove(indexExisting);
+            return true;
         }
-        return true;
+        return false;
     }
 
     @Override
-    public L<String> getNamesWithPrefix(String dir, String prefix) {
-        if (!fs.containsKey(dir)) {
-            return new L();
+    public boolean deleteDirIfExists(String dir) {
+        /// Deletes a dir with all its contents and subfolders
+        for (String dirName : fs.keySet()) {
+            if (dirName.startsWith(dir)) {
+                fs.remove(dirName);
+                return true;
+            }
         }
-        var existingFiles = fs.get(dir);
-        var tra = existingFiles.transIf(x -> x.name.startsWith(prefix), y -> y.name);
-        return tra;
+        return false;
     }
-
 }
 
 
@@ -189,6 +194,14 @@ static class MockFile {
 
 //}}}
 //{{{ Utils
+//{{{ Action
+
+@FunctionalInterface
+interface Action {
+    void run();
+}
+
+//}}}
 
 static void blAssert(boolean predicate) {
     if (!predicate) {
@@ -253,27 +266,6 @@ static void runTest(Action theTest, TestResults counters) {
     counters.countRun++;
 }
 
-static int getMaxVersion(L<String> filenames) {
-    /// For a list like `file.txt, file-2.txt, file-3.txt`, returns 3.
-    L<String> withoutExts = filenames.trans(Test::shaveOffExtension);
-    var versions = new L();
-    int result = 1;
-    for (int i = 0; i < filenames.size(); i++) {
-        String shortName = withoutExts.get(i);
-        int indDash = shortName.lastIndexOf("-");
-        if (indDash < 0 || indDash == (shortName.length() - 1)) {
-            continue;
-        }
-        var mbNumber = parseInt(shortName.substring(indDash + 1));
-        if (mbNumber.isPresent() && result < mbNumber.get()) {
-            result = mbNumber.get();
-        } else {
-            continue;
-        }
-    }
-    return result;
-}
-
 static <X> void print(X x) { // No relation to the band Static-X
     System.out.println(x);
 }
@@ -319,8 +311,9 @@ static void testFilePrefixes() {
 }
 
 static void testMaxVersion() {
-    int mv = getMaxVersion(L.of("file.txt", "file-2.txt", "file-3.txt"));
-    blAssert(mv == 3);
+    var mv = getNameWithMaxVersion(L.of("file.txt", "file-2.txt", "file-3.txt"));
+    blAssert(mv.f1.equals("file-3.txt"));
+    blAssert(mv.f2 == 3);
 }
 
 //}}}
