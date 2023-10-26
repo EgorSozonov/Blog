@@ -5,11 +5,11 @@ ifndef VERBOSE
 endif
 
 ifndef EXEDIR
-EXEDIR = ../../exes
+EXEDIR = $(abspath ../../exes)
 endif
 
 ifndef DEBUGDIR
-DEBUGDIR = ../../debug
+DEBUGDIR = $(abspath ../../debug)
 endif
 
 .PHONY: all build clean test help binFolder
@@ -18,13 +18,11 @@ APP=blog
 BUILDDIR=$(EXEDIR)/$(APP)
 TESTDIR=$(DEBUGDIR)/$(APP)
 
-all: $(BUILDDIR) ## Build the whole project
+all: build  ## Build the whole project
 / @echo "========================================="
 / @echo "              BUILD SUCCESS              "
 / @echo "========================================="
 
-run:
-/ node _bin/$(BIN).js
 
 binFolder:
 / mkdir -p $(BUILDDIR)
@@ -40,17 +38,10 @@ _bin/test: | _bin
 
 test: ## Run unit tests
 / echo 'testing'
-/ echo $(TESTDIR)
-/ echo $(DEBUGDIR)
 / javac -d '$(TESTDIR)' src/Blog.java src/Utils.java test/Test.java
-/ jar -cv -C '$(TESTDIR)' -f test.jar -e tech.sozonov.blog.Test tech/sozonov/blog/*.class
+/ jar -c -v -f $(TESTDIR)/test.jar -e tech.sozonov.blog.Test -C $(TESTDIR) tech/sozonov/blog
 / java -jar $(TESTDIR)/test.jar
 
-
-
-#g++ -g3 --std=c++23 -I/usr/local/include/oatpp-1.3.0/oatpp -o _bin/cache/blog.o -c src/main.cpp
-
-#g++ -rdynamic "_bin/cache/blog.o" -o oaplay /usr/local/lib/oatpp-1.3.0/liboatpp-test.a /usr/local/lib/oatpp-1.3.0/liboatpp.a -latomic 
 
 help: ## Show this help
 / @egrep -h '\s##\s' $(MAKEFILE_LIST) | sort | awk 'BEGIN {print "-- Help --";print ""; FS = ":.*?## "}; {printf "\033[32m%-10s\033[0m %s\n", $$1, $$2}'
