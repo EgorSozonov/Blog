@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.Optional;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.util.function.Predicate;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -40,7 +41,7 @@ static final String[] fixedCoreFiles =
             { "notFound.html", "img404.png", "style.css", "blog.html", "script.js",
               "favicon.ico", "footer.html", "no.png", "yes.png", "termsOfUse.html"};
 
-static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.systemDefault());
 
 //}}}
 //{{{ Blog
@@ -88,7 +89,7 @@ void ingestCore() {
     }
     for (int i = 0; i < fixedCoreFiles.length; i++) {
         if (coreVersions[i] == null) {
-            L<String> existingNames = fs.getNamesWithPrefix(blogDir, 
+            L<String> existingNames = fs.getNamesWithPrefix(blogDir,
                     shaveOffExtension(fixedCoreFiles[i]));
             if (existingNames.size() == 0)  {
                 print("Error, no core fixed file found for " + fixedCoreFiles[i]);
@@ -276,14 +277,14 @@ static String parseCreatedDate(String old) {
     int indStart = old.indexOf(stampOpen);
     int indEnd = old.indexOf(stampClose);
     int indDateStart = indStart + stampOpen.length();
-    String datePart = old.substring(indDateStart, indDateStart + stampClose.length());
+    String datePart = old.substring(indDateStart, indEnd);
     return datePart.substring(14, 24); // Skipping length of `<div>Created: `
 }
 
 void createNewDocs(Ingestion ing) {
     for (CreateUpdate cre : ing.createDocs) {
         String freshContent = buildDocument("", todayDt, cre.newContent);
-    } 
+    }
 }
 
 void updateDocs(Ingestion ing) {
@@ -312,7 +313,7 @@ static Tu<String, Integer> getNameWithMaxVersion(L<String> filenames) {
     L<String> withoutExts = filenames.trans(Utils::shaveOffExtension);
     var versions = new L();
     int maxVersion = 0;
-    String result = filenames.get(0); 
+    String result = filenames.get(0);
     for (int i = 0; i < filenames.size(); i++) {
         String shortName = withoutExts.get(i);
         int indDash = shortName.lastIndexOf("-");
@@ -333,12 +334,16 @@ static Tu<String, Integer> getNameWithMaxVersion(L<String> filenames) {
 
 static String makeNameBumpedVersion(String unversionedName, L<String> existingNames) {
     /// `file.js` (`file-2.js` `file-3.js`) => `file-4.js`
+    print("makeBumped");
     if (existingNames.size() == 0) {
         return unversionedName;
     } else {
         int maxExistingVersion = getNameWithMaxVersion(existingNames).f2;
+
+        print("makeBumped existing " + maxExistingVersion);
+        int newVersion = (maxExistingVersion == 0) ? 2 : maxExistingVersion + 1;
         int indLastDot = unversionedName.lastIndexOf(".");
-        return unversionedName.substring(0, indLastDot) + "-" + (maxExistingVersion + 1)
+        return unversionedName.substring(0, indLastDot) + "-" + newVersion
                 + unversionedName.substring(indLastDot);
     }
 }
@@ -355,10 +360,10 @@ static class Ingestion {
 
     public Ingestion(L<CreateUpdate> createDirs, L<CreateUpdate> updateDirs, L<String> deleteDirs,
                      L<Doc> allDirs) {
-                     
+
         print("Ingestion constructor, count of create " + createDocs.size()
-                + ", updateDocs count = " + updateDocs.size() + ", deleteDocs count = " 
-                + deleteDocs.size() + ", allDirs = " + allDocs.size()); 
+                + ", updateDocs count = " + updateDocs.size() + ", deleteDocs count = "
+                + deleteDocs.size() + ", allDirs = " + allDocs.size());
         this.createDocs = createDirs;
         this.updateDocs = updateDirs;
         this.deleteDocs = deleteDirs;
@@ -367,7 +372,7 @@ static class Ingestion {
     }
 
     NavTree buildThematic(L<Doc> allDirs) {
-        print("BuildThematic, count of allDirs " + allDirs.size()); 
+        print("BuildThematic, count of allDirs " + allDirs.size());
         Collections.sort(allDirs, (x, y) ->{
             int folderLengthCommon = Math.min(x.spl.size(), y.spl.size());
             for (int i = 0; i < folderLengthCommon; i++) {

@@ -348,11 +348,17 @@ static void updateCore() {
     var coreNames = fs.listFiles(blogDir).trans(x -> x.name);
     assertArrsEqual(coreNames,
             L.of("termsOfUse.html", "termsOfUse-2.html", "img404.png"));
-    int indInFixed = findIndex(b.coreVersions, x -> x.equals("termsOfUse.html"));
+    int indInFixed = -1;
+    for (int i = 0; i < fixedCoreFiles.length; i++) {
+        if (fixedCoreFiles[i].equals("termsOfUse.html")) {
+            indInFixed = i;
+            break;
+        }
+    }
     blAssert(b.coreVersions[indInFixed].equals("termsOfUse-2.html"));
 }
 
-static void parseDate() {
+static void parseDateStamp() {
     String input = "<!-- Dates --><div>Created: 2023-04-05, updated: 2023-04-06</div><!-- / -->";
     String dateOld = Blog.parseCreatedDate(input);
     blAssert(dateOld.equals("2023-04-05"));
@@ -366,8 +372,9 @@ public static void main(String[] args) {
 //~    runTest(Test::testFilePrefixes, counters);
 //~    runTest(Test::testMaxVersion, counters);
 //~    runTest(Test::testIngestCore, counters);
+
     runTest(Test::updateCore, counters);
-    runTest(Test::parseDate, counters);
+    runTest(Test::parseDateStamp, counters);
 
     if (counters.countFailed > 0)  {
         System.out.println("Failed " + counters.countFailed + " tests");
