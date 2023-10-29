@@ -364,6 +364,45 @@ static void parseDateStamp() {
     blAssert(dateOld.equals("2023-04-05"));
 }
 
+static void createNewDoc() {
+    /// With core files in place, create a simple first doc
+    var fs = new MockFileSys();
+    Blog b = new Blog(fs);
+    String inDir = getIngestDir();
+    fs.saveOverwriteFile(blogDir, "termsOfUse.html", "Terms of Use");
+    fs.saveOverwriteFile(blogDir, "script.js", "Terms of Use");
+    fs.saveOverwriteFile(blogDir, "style.css", "Terms of Use");
+    fs.saveOverwriteFile(blogDir, "blog.html", "Terms of Use");
+    fs.saveOverwriteFile(inDir + "/a.b.c", "i.html", """
+<html>
+<body>
+    <div>Hello world!</div>
+</body>
+</html>
+    """);
+
+    b.ingestDocs();
+    
+    String expectedContent = """
+<html>
+<head>
+    <style "style.css">
+    <script "script.js">
+</head>
+<body>
+<!-- Dates --><div>Created: 2023-04-05, updated: 2023-04-06</div><!-- / -->
+    <div>Hello world!</div>
+</body>
+</html>
+    """;
+
+    L<FileInfo> resultingFiles = fs.listFiles(blogDir + "/a/b/c");
+    blAssert(b.size() == 1 && b.get(0).name.equals("i.html")); 
+    String cont = b.get(0).cont;
+    print(cont); 
+    blAssert(cont.equals(expectedContent));
+}
+
 public static void main(String[] args) {
     System.out.println("Hw");
     TestResults counters = new TestResults();
@@ -372,9 +411,9 @@ public static void main(String[] args) {
 //~    runTest(Test::testFilePrefixes, counters);
 //~    runTest(Test::testMaxVersion, counters);
 //~    runTest(Test::testIngestCore, counters);
-
-    runTest(Test::updateCore, counters);
-    runTest(Test::parseDateStamp, counters);
+//~    runTest(Test::updateCore, counters);
+//~    runTest(Test::parseDateStamp, counters);
+    runTest(Test::createNewDoc, counters);
 
     if (counters.countFailed > 0)  {
         System.out.println("Failed " + counters.countFailed + " tests");
