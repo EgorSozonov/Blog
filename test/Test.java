@@ -45,13 +45,15 @@ static class MockFileSys implements FileSys {
     }
 
     @Override
-    public L<String> listDirs(String dir) {
+    public L<String> listSubfolders(String dir) {
         String dirWithSl = (dir.endsWith("/")) ? dir : (dir + "/");
-        List<String> subfolders = fs.keySet().stream().filter(x -> x.startsWith(dirWithSl)).toList();
-        return (L<String>)subfolders.stream().map((String x) -> {
-            int indSlash = x.indexOf("/");
-            return indSlash < 0 ? x : x.substring(0, indSlash);
-        }).toList();
+        L<String> subfolders = new L();
+        for (String key : fs.keySet()) {
+            if (key.startsWith(dirWithSl)) {
+                subfolders.add(key);
+            }
+        }
+        return subfolders; 
     }
     
     @Override
@@ -396,9 +398,10 @@ static void createNewDoc() {
 </html>
     """;
 
-    L<FileInfo> resultingFiles = fs.listFiles(blogDir + "/a/b/c");
-    blAssert(b.size() == 1 && b.get(0).name.equals("i.html")); 
-    String cont = b.get(0).cont;
+    String pathNewDoc = Paths.get(blogDir, "a", "b", "c").toString();
+    L<FileInfo> result = fs.listFiles(pathNewDoc);
+    blAssert(result.size() == 1 && result.get(0).name.equals("i.html")); 
+    String cont = fs.readTextFile(pathNewDoc, "i.html");
     print(cont); 
     blAssert(cont.equals(expectedContent));
 }

@@ -121,16 +121,16 @@ Ingestion buildIngestion() {
     L<Doc> allDocs = new L();
     Set<String> oldDirs = fs.listSubfoldersContaining(blogDir, "i.html").toSet();
 
-    L<String> ingestDirs = fs.listDirs(ingestDir);
+    L<String> ingestDirs = fs.listSubfolders(ingestDir);
+    print("Seeing " + ingestDirs.size() + " ingestDirs"); 
     L<String> targetDirs = ingestDirs.trans(x -> convertToTargetDir(x));
     for (int i = 0; i < ingestDirs.size(); i++) {
         String inSourceDir = ingestDirs.get(i);
         String inTargetDir = targetDirs.get(i);
         String newContent = "";
-        var inFiles = fs.listFiles(Paths.get(ingestDir, inSourceDir).toString());
+        var inFiles = fs.listFiles(inSourceDir);
         int mbIndex = inFiles.findIndex(x -> x.name.equals("i.html"));
         if (oldDirs.contains(inTargetDir)) {
-
             if (mbIndex > -1) {
                 newContent = fs.readTextFile(inSourceDir, "i.html");
                 if (newContent.length() <= 1) {
@@ -361,9 +361,9 @@ static class Ingestion {
     public Ingestion(L<CreateUpdate> createDirs, L<CreateUpdate> updateDirs, L<String> deleteDirs,
                      L<Doc> allDirs) {
 
-        print("Ingestion constructor, count of create " + createDocs.size()
-                + ", updateDocs count = " + updateDocs.size() + ", deleteDocs count = "
-                + deleteDocs.size() + ", allDirs = " + allDocs.size());
+        print("Ingestion constructor, count of create " + createDirs.size()
+                + ", updateDocs count = " + updateDirs.size() + ", deleteDocs count = "
+                + deleteDirs.size() + ", allDirs = " + allDirs.size());
         this.createDocs = createDirs;
         this.updateDocs = updateDirs;
         this.deleteDocs = deleteDirs;
@@ -426,7 +426,9 @@ static class CreateUpdate {
     public CreateUpdate(String sourceDir, String targetDir)  {
         this.sourceDir = sourceDir;
         this.targetDir = targetDir;
+         
         this.newContent = "";
+        
         localVersions = new HashMap();
     }
 
@@ -543,7 +545,7 @@ static class FileInfo {
 interface FileSys {
     boolean dirExists(String dir);
     L<FileInfo> listFiles(String dir); // immediate files in a dir
-    L<String> listDirs(String dir); // immediate children dirs
+    L<String> listSubfolders(String dir); // full names of immediate child dirs
     L<String> listSubfoldersContaining(String dir, String fN); // recursively list all nested dirs
     L<String> getNamesWithPrefix(String dir, String prefix);
     String readTextFile(String dir, String fN);
