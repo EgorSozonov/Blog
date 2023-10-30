@@ -132,16 +132,16 @@ static final class L<T> implements List<T> {
         checkBoundExclusive(index);
         T r = data[index];
         modCount++;
-        --size; 
+        --size;
         if (index != size) { System.arraycopy(data, index + 1, data, index, size - index); }
         // Aid for garbage collection by releasing this pointer.
         data[size] = null;
         return r;
     }
-    
+
     public void removeLast() {
         checkBoundExclusive(size - 1);
-        ++modCount; 
+        ++modCount;
         --size;
         data[size] = null;
     }
@@ -316,7 +316,7 @@ static final class L<T> implements List<T> {
 
 
     public Optional<T> first(Predicate<T> pred) {
-        /// Find index of first element satisfying predicate. 
+        /// Find index of first element satisfying predicate.
         /// The method missing from the Java streams
         for (int i = 0; i < size; i++) {
             if (pred.test(data[i])) {
@@ -327,7 +327,7 @@ static final class L<T> implements List<T> {
     }
 
     public boolean any(Predicate<T> pred) {
-        /// Find index of first element satisfying predicate. 
+        /// Find index of first element satisfying predicate.
         /// The method missing from the Java streams
         for (int i = 0; i < size; i++) {
             if (pred.test(data[i])) {
@@ -341,8 +341,8 @@ static final class L<T> implements List<T> {
         /// Returns the last element. Assumes the list is non-empty
         return data[size - 1];
     }
-    
-    
+
+
     public Set<T> toSet() {
         Set<T> result = new HashSet<T>();
         for (int i = 0; i < size; ++i) {
@@ -350,8 +350,8 @@ static final class L<T> implements List<T> {
         }
         return result;
     }
-    
-    
+
+
     public static class LIterator<T> implements ListIterator<T> {
         private int i;
         private int size;
@@ -418,8 +418,8 @@ static final class L<T> implements List<T> {
                 throw new RuntimeException();
             }
         }
-        
-        
+
+
     }
 }
 
@@ -467,5 +467,35 @@ static String monthNameOf(String dt) {
 }
 
 //}}}
+//{{{ Directories
 
+public static class Dir {
+    public String cont;
+    public Dir(AbsDir absDir, Subfolder subf)  {
+        this.cont = Paths.get(absDir, subf).toString();
+    }
+    public AbsDir toAbsolute() {
+        return new AbsDir(this.cont);
+    }
+}
+
+public static class AbsDir {
+    public String cont;
+    public AbsDir(String cont) {
+        this.cont = cont;
+    }
+}
+
+public static class Subfolder {
+    public String cont;
+    public Subfolder(String cont) {
+        this.cont = cont;
+    }
+}
+
+public static Subfolder glueSubf(Subfolder... subfolders) {
+    return new Subfolder(Paths.get(subfolders).toString());
+}
+
+//}}}
 }

@@ -31,8 +31,8 @@ class Blog {
 
 //{{{ Constants
 
-static final String blogDir = "/var/www/blog";
-static final String ingestDir = "/var/www/blogIngest";
+static final Dir blogDir = new Dir(new AbsDir("/var/www"), new Subfolder("blog"));
+static final Dir ingestDir = new Dir(new AbsDir("/var/www"), new Subfolder("blogIngest"));
 
 static final String appSuburl = "blog/"; // The URL prefix
 static final int updateFreq = 300; // seconds before the cache gets rescanned
@@ -122,7 +122,6 @@ Ingestion buildIngestion() {
     Set<String> oldDirs = fs.listSubfoldersContaining(blogDir, "i.html").toSet();
 
     L<String> ingestDirs = fs.listSubfolders(ingestDir);
-    print("Seeing " + ingestDirs.size() + " ingestDirs"); 
     L<String> targetDirs = ingestDirs.trans(x -> convertToTargetDir(x));
     for (int i = 0; i < ingestDirs.size(); i++) {
         String inSourceDir = ingestDirs.get(i);
@@ -142,7 +141,8 @@ Ingestion buildIngestion() {
             updateDirs.add(new CreateUpdate(inSourceDir, inTargetDir));
             allDocs.add(new Doc(inTargetDir));
         } else if (mbIndex > -1) {
-            createDirs.add(new CreateUpdate(inSourceDir, inTargetDir));
+            newContent = fs.readTextFile(inSourceDir, "i.html");
+            createDirs.add(new CreateUpdate(inSourceDir, inTargetDir, newContent));
             allDocs.add(new Doc(inTargetDir));
         }
     }
@@ -177,15 +177,15 @@ String buildDocument(String old, String updatedDt, String newContent) {
 
 void buildHead(boolean hasLocalScript, L<String> globalScripts, StringBuilder result) {
     result.append(template0);
-    result.append("<script type=\"text/javascript\" src=\"/blog/script.js\"></script>\n");
+    result.append("    <script type=\"text/javascript\" src=\"/blog/script.js\"></script>\n");
     for (String gs : globalScripts) {
         if (globalVersions.containsKey(gs)) {
-            result.append("<script type=\"text/javascript\" src=\"/blog/"
+            result.append("    <script type=\"text/javascript\" src=\"/blog/"
                     + globalVersions.get(gs) + "\"></script>\n");
         }
     }
     if (hasLocalScript) {
-        result.append("<script type=\"text/javascript\" src=\"/blog/local.js\"></script>\n");
+        result.append("    <script type=\"text/javascript\" src=\"/blog/local.js\"></script>\n");
     }
     result.append("</head>\n");
 }
@@ -284,6 +284,8 @@ static String parseCreatedDate(String old) {
 void createNewDocs(Ingestion ing) {
     for (CreateUpdate cre : ing.createDocs) {
         String freshContent = buildDocument("", todayDt, cre.newContent);
+        String folderForDocument = Paths.get(blogDir, cre.targetDir).toString();
+        fs.saveOverwriteFile(Paths.get(blogDir, cre.targetDir).toString(), "i.html", freshContent);
     }
 }
 
@@ -334,13 +336,10 @@ static Tu<String, Integer> getNameWithMaxVersion(L<String> filenames) {
 
 static String makeNameBumpedVersion(String unversionedName, L<String> existingNames) {
     /// `file.js` (`file-2.js` `file-3.js`) => `file-4.js`
-    print("makeBumped");
     if (existingNames.size() == 0) {
         return unversionedName;
     } else {
         int maxExistingVersion = getNameWithMaxVersion(existingNames).f2;
-
-        print("makeBumped existing " + maxExistingVersion);
         int newVersion = (maxExistingVersion == 0) ? 2 : maxExistingVersion + 1;
         int indLastDot = unversionedName.lastIndexOf(".");
         return unversionedName.substring(0, indLastDot) + "-" + newVersion
@@ -354,13 +353,12 @@ static String makeNameBumpedVersion(String unversionedName, L<String> existingNa
 static class Ingestion {
     L<CreateUpdate> createDocs;
     L<CreateUpdate> updateDocs;
-    L<String> deleteDocs; // list of dirs like `a/b/c`
+    L<Subfolder> deleteDocs; // list of dirs like `a/b/c`
     L<Doc> allDocs;
     NavTree nav;
 
     public Ingestion(L<CreateUpdate> createDirs, L<CreateUpdate> updateDirs, L<String> deleteDirs,
                      L<Doc> allDirs) {
-
         print("Ingestion constructor, count of create " + createDirs.size()
                 + ", updateDocs count = " + updateDirs.size() + ", deleteDocs count = "
                 + deleteDirs.size() + ", allDirs = " + allDirs.size());
@@ -418,21 +416,21 @@ static class Ingestion {
 }
 
 static class CreateUpdate {
-    String sourceDir; // source dir like `a.b.c`
-    String targetDir; // target dir like `a/b/c`
+    Subfolder sourceDir; // source dir like `a.b.c`
+    Subfolder targetDir; // target dir like `a/b/c`
     String newContent; // content of the new "i.html" file, if it's present
     Map<String, String> localVersions; // map from prefix to full filename for local files
 
-    public CreateUpdate(String sourceDir, String targetDir)  {
+    public CreateUpdate(Subfolder sourceDir, Subfolder targetDir)  {
         this.sourceDir = sourceDir;
         this.targetDir = targetDir;
-         
+
         this.newContent = "";
-        
+
         localVersions = new HashMap();
     }
 
-    public CreateUpdate(String sourceDir, String targetDir, String newContent)  {
+    public CreateUpdate(Subfolder sourceDir, Subfolder targetDir, String newContent)  {
         this.sourceDir = sourceDir;
         this.targetDir = targetDir;
         this.newContent = newContent;
@@ -442,12 +440,12 @@ static class CreateUpdate {
 
 
 static class Doc {
-    String targetDir;
+    Subfolder targetDir;
     L<String> spl;
 
-    public Doc(String targetDir) {
+    public Doc(Subfolder targetDir) {
         this.targetDir = targetDir;
-        this.spl = L.of(targetDir.split("/"));
+        this.spl = L.of(targetDir.cont.split("/"));
     }
 }
 
@@ -543,18 +541,18 @@ static class FileInfo {
 }
 
 interface FileSys {
-    boolean dirExists(String dir);
-    L<FileInfo> listFiles(String dir); // immediate files in a dir
-    L<String> listSubfolders(String dir); // full names of immediate child dirs
-    L<String> listSubfoldersContaining(String dir, String fN); // recursively list all nested dirs
-    L<String> getNamesWithPrefix(String dir, String prefix);
-    String readTextFile(String dir, String fN);
-    boolean createDir(String dir);
-    boolean saveOverwriteFile(String dir, String fN, String cont);
-    boolean moveFile(String dir, String fN, String targetDir);
-    String moveFileToNewVersion(String dir, String fN, String targetDir);
-    boolean deleteIfExists(String dir, String fN);
-    boolean deleteDirIfExists(String dir);
+    boolean dirExists(Dir dir);
+    L<FileInfo> listFiles(Dir dir); // immediate files in a dir
+    L<String> listSubfolders(Dir dir); // full names of immediate child dirs
+    L<String> listSubfoldersContaining(Dir dir, String fN); // recursively list all nested dirs
+    L<String> getNamesWithPrefix(Dir dir, String prefix);
+    String readTextFile(Dir dir, String fN);
+    boolean createDir(Dir dir);
+    boolean saveOverwriteFile(Dir dir, String fN, String cont);
+    boolean moveFile(Dir dir, String fN, Dir targetDir);
+    String moveFileToNewVersion(Dir dir, String fN, Dir targetDir);
+    boolean deleteIfExists(Dir dir, String fN);
+    boolean deleteDirIfExists(Dir dir);
 }
 
 

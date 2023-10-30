@@ -32,21 +32,21 @@ static class MockFileSys implements FileSys {
     private Map<String, L<MockFile>> fs = new HashMap<String, L<MockFile>>();
 
     @Override
-    public boolean dirExists(String dir) {
-        return fs.containsKey(dir);
+    public boolean dirExists(Dir dir) {
+        return fs.containsKey(dir.cont);
     }
 
     @Override
-    public L<FileInfo> listFiles(String dir) {
-        if (!fs.containsKey(dir))    {
+    public L<FileInfo> listFiles(Dir dir) {
+        if (!fs.containsKey(dir.cont))    {
             return new L();
         }
-        return fs.get(dir).trans(x -> new FileInfo(x.name, x.modified));
+        return fs.get(dir.cont).trans(x -> new FileInfo(x.name, x.modified));
     }
 
     @Override
-    public L<String> listSubfolders(String dir) {
-        String dirWithSl = (dir.endsWith("/")) ? dir : (dir + "/");
+    public L<String> listSubfolders(Dir dir) {
+        String dirWithSl = (dir.cont.endsWith("/")) ? dir.cont : (dir.cont + "/");
         L<String> subfolders = new L();
         for (String key : fs.keySet()) {
             if (key.startsWith(dirWithSl)) {
@@ -58,11 +58,11 @@ static class MockFileSys implements FileSys {
     
     @Override
 
-    public L<String> listSubfoldersContaining(String dir, String fN) {
+    public L<String> listSubfoldersContaining(Dir dir, String fN) {
         /// Gets the list of directories containing a filename, for example "i.html"
         L<String> result = new L(10);
         for (var e : fs.entrySet()) {
-            if (e.getKey().startsWith(dir) && e.getValue().any(x -> x.name.equals("i.html"))) {
+            if (e.getKey().startsWith(dir.cont) && e.getValue().any(x -> x.name.equals("i.html"))) {
                 result.add(e.getKey());
             }
         }
@@ -70,37 +70,36 @@ static class MockFileSys implements FileSys {
     }
 
     @Override
-    public L<String> getNamesWithPrefix(String dir, String prefix) {
-        if (!fs.containsKey(dir)) {
+    public L<String> getNamesWithPrefix(Dir dir, String prefix) {
+        if (!fs.containsKey(dir.cont)) {
             return new L();
         }
-        var existingFiles = fs.get(dir);
-        var tra = existingFiles.transIf(x -> x.name.startsWith(prefix), y -> y.name);
-        return tra;
+        var existingFiles = fs.get(dir.cont);
+        return existingFiles.transIf(x -> x.name.startsWith(prefix), y -> y.name);
     }
 
     @Override
-    public String readTextFile(String dir, String fN) {
-        if (!fs.containsKey(dir)) {
+    public String readTextFile(Dir dir, String fN) {
+        if (!fs.containsKey(dir.cont)) {
             return "";
         }
-        return fs.get(dir).first(x -> x.name.equals(fN)).map(x -> x.cont).orElse("");
+        return fs.get(dir.cont).first(x -> x.name.equals(fN)).map(x -> x.cont).orElse("");
     }
 
     @Override
-    public boolean createDir(String dir) {
-        if (fs.containsKey(dir)) {
+    public boolean createDir(Dir dir) {
+        if (fs.containsKey(dir.cont)) {
             return true;
         }
-        fs.put(dir, new L());
+        fs.put(dir.cont, new L());
         return true;
     }
 
     @Override
-    public boolean saveOverwriteFile(String dir, String fN, String cont) {
+    public boolean saveOverwriteFile(Dir dir, String fN, String cont) {
         var newFile = new MockFile(fN, cont, Instant.now());
-        if (fs.containsKey(dir)) {
-            var existingFiles = fs.get(dir);
+        if (fs.containsKey(dir.cont)) {
+            var existingFiles = fs.get(dir.cont);
             var indexExisting = existingFiles.findIndex(x -> x.name.equals(fN));
             if (indexExisting == -1) {
                 existingFiles.add(newFile);
@@ -108,17 +107,17 @@ static class MockFileSys implements FileSys {
                 existingFiles.set(indexExisting, newFile);
             }
         } else {
-            fs.put(dir, L.of(newFile));
+            fs.put(dir.cont, L.of(newFile));
         }
         return true;
     }
 
     @Override
-    public boolean moveFile(String dir, String fN, String targetDir) {
-        var sourceFiles = fs.get(dir);
+    public boolean moveFile(Dir dir, String fN, Dir targetDir) {
+        var sourceFiles = fs.get(dir.cont);
         int indexSource = sourceFiles.findIndex(x -> x.name.equals(fN));
         MockFile sourceFile = sourceFiles.get(indexSource);
-        L<MockFile> targetFiles = fs.get(targetDir);
+        L<MockFile> targetFiles = fs.get(targetDir.cont);
 
         var existingInd = targetFiles.indexOf(fN);
         String newName = fN;
@@ -132,13 +131,13 @@ static class MockFileSys implements FileSys {
     }
 
     @Override
-    public String moveFileToNewVersion(String dir, String fN, String targetDir) {
-        var sourceFiles = fs.get(dir);
+    public String moveFileToNewVersion(Dir dir, String fN, Dir targetDir) {
+        var sourceFiles = fs.get(dir.cont);
         int indexSource = sourceFiles.findIndex(x -> x.name.equals(fN));
         MockFile sourceFile = sourceFiles.get(indexSource);
 
         createDir(targetDir);
-        var targetFiles = fs.get(targetDir);
+        var targetFiles = fs.get(targetDir.cont);
 
         var existingWithThisPrefix = getNamesWithPrefix(targetDir, shaveOffExtension(fN));
         String newName = fN;
@@ -153,11 +152,11 @@ static class MockFileSys implements FileSys {
     }
 
     @Override
-    public boolean deleteIfExists(String dir, String fN) {
-        if (!fs.containsKey(dir)) {
+    public boolean deleteIfExists(Dir dir, String fN) {
+        if (!fs.containsKey(dir.cont)) {
             return false;
         }
-        var existingFiles = fs.get(dir);
+        var existingFiles = fs.get(dir.cont);
         int indexExisting = existingFiles.findIndex(x -> x.name.equals(fN));
         if (indexExisting > -1) {
             existingFiles.remove(indexExisting);
@@ -167,10 +166,10 @@ static class MockFileSys implements FileSys {
     }
 
     @Override
-    public boolean deleteDirIfExists(String dir) {
+    public boolean deleteDirIfExists(Dir dir) {
         /// Deletes a dir with all its contents and subfolders
         for (String dirName : fs.keySet()) {
-            if (dirName.startsWith(dir)) {
+            if (dirName.startsWith(dir.cont)) {
                 fs.remove(dirName);
                 return true;
             }
@@ -178,8 +177,6 @@ static class MockFileSys implements FileSys {
         return false;
     }
 }
-
-
 
 
 static class MockFile {
@@ -247,9 +244,6 @@ static boolean isFixedCore(String fN) {
     return false;
 }
 
-static String getIngestDir() {
-    return Paths.get(ingestDir).toString();
-}
 
 static void printIngestion(Ingestion ing) {
     /// Print the full structure for testing purposes
@@ -298,17 +292,20 @@ static class TestResults {
 
 static void testSaveFile() {
     FileSys fs = new MockFileSys();
-    boolean resSave = fs.saveOverwriteFile("a/b", "myFile.txt", "An ode to joy");
+    Subfolder subf = new Subfolder("a/b");
+    Dir target = new Dir(blogDir, subf);
+    boolean resSave = fs.saveOverwriteFile(target, "myFile.txt", "An ode to joy");
     blAssert(resSave);
 }
 
 
 static void testFilePrefixes() {
     FileSys fs = new MockFileSys();
-    fs.saveOverwriteFile("a/b", "myFile.txt",    "An ode to joy");
-    fs.saveOverwriteFile("a/b", "myFile-2.txt", "An ode to joy 2");
-    fs.saveOverwriteFile("a/b", "myFile-3.txt", "An ode to joy 3");
-    var versions = fs.getNamesWithPrefix("a/b", "myFile");
+    Dir target = new Dir(blogDir.toAbsolute(), new Subfolder("a/b"));
+    fs.saveOverwriteFile(target, "myFile.txt", "An ode to joy");
+    fs.saveOverwriteFile(target, "myFile-2.txt", "An ode to joy 2");
+    fs.saveOverwriteFile(target, "myFile-3.txt", "An ode to joy 3");
+    var versions = fs.getNamesWithPrefix(target, "myFile");
     assertArrsEqual(versions, L.of("myFile.txt", "myFile-2.txt", "myFile-3.txt"));
 }
 
@@ -323,7 +320,7 @@ static void testMaxVersion() {
 static void ingestCore() {
     /// First ingestion of fixed core files
     var fs = new MockFileSys();
-    String inDir = getIngestDir();
+    Dir inDir = ingestDir;
     fs.saveOverwriteFile(inDir, "script.js", "core script");
     fs.saveOverwriteFile(inDir, "style.css", "core styles");
     Blog b = new Blog(fs);
@@ -338,7 +335,7 @@ static void ingestCore() {
 static void updateCore() {
     /// Update of a fixed core file to a new version
     var fs = new MockFileSys();
-    String inDir = getIngestDir();
+    Dir inDir = ingestDir;
     print("saving to dir " + inDir);
     fs.saveOverwriteFile(blogDir, "termsOfUse.html", "Terms of Use");
     fs.saveOverwriteFile(inDir, "img404.png", "img");
@@ -370,13 +367,15 @@ static void createNewDoc() {
     /// With core files in place, create a simple first doc
     var fs = new MockFileSys();
     Blog b = new Blog(fs);
-    String inDir = getIngestDir();
+    Dir inDir = ingestDir;
     fs.saveOverwriteFile(blogDir, "termsOfUse.html", "Terms of Use");
     fs.saveOverwriteFile(blogDir, "script.js", "Terms of Use");
     fs.saveOverwriteFile(blogDir, "style.css", "Terms of Use");
     fs.saveOverwriteFile(blogDir, "blog.html", "Terms of Use");
     fs.saveOverwriteFile(inDir + "/a.b.c", "i.html", """
 <html>
+<head>
+</head>
 <body>
     <div>Hello world!</div>
 </body>
@@ -400,6 +399,7 @@ static void createNewDoc() {
 
     String pathNewDoc = Paths.get(blogDir, "a", "b", "c").toString();
     L<FileInfo> result = fs.listFiles(pathNewDoc);
+    print("size " + result.size() + ", name " + result.get(0).name); 
     blAssert(result.size() == 1 && result.get(0).name.equals("i.html")); 
     String cont = fs.readTextFile(pathNewDoc, "i.html");
     print(cont); 
