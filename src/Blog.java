@@ -31,8 +31,9 @@ class Blog {
 
 //{{{ Constants
 
-static final Dir blogDir = new Dir(new AbsDir("/var/www"), new Subfolder("blog"));
-static final Dir ingestDir = new Dir(new AbsDir("/var/www"), new Subfolder("blogIngest"));
+static final Dir webRoot = Dir.ofString("/var/www");
+static final Dir blogDir = new Dir(webRoot, new Subfolder("blog"));
+static final Dir ingestDir = new Dir(webRoot, new Subfolder("blogIngest"));
 
 static final String appSuburl = "blog/"; // The URL prefix
 static final int updateFreq = 300; // seconds before the cache gets rescanned
@@ -117,15 +118,15 @@ void ingestDocs() {
 Ingestion buildIngestion() {
     L<CreateUpdate> createDirs = new L();
     L<CreateUpdate> updateDirs = new L();
-    L<String> deleteDirs = new L();
+    L<Subfolder> deleteDirs = new L();
     L<Doc> allDocs = new L();
-    Set<String> oldDirs = fs.listSubfoldersContaining(blogDir, "i.html").toSet();
+    Set<Subfolder> oldDirs = fs.listSubfoldersContaining(blogDir, "i.html").toSet();
 
-    L<String> ingestDirs = fs.listSubfolders(ingestDir);
-    L<String> targetDirs = ingestDirs.trans(x -> convertToTargetDir(x));
+    L<Subfolder> ingestDirs = fs.listSubfolders(ingestDir);
+    L<Subfolder> targetDirs = ingestDirs.trans(x -> convertToTargetDir(x));
     for (int i = 0; i < ingestDirs.size(); i++) {
-        String inSourceDir = ingestDirs.get(i);
-        String inTargetDir = targetDirs.get(i);
+        Subfolder inSourceDir = ingestDirs.get(i);
+        Subfolder inTargetDir = targetDirs.get(i);
         String newContent = "";
         var inFiles = fs.listFiles(inSourceDir);
         int mbIndex = inFiles.findIndex(x -> x.name.equals("i.html"));
@@ -141,7 +142,7 @@ Ingestion buildIngestion() {
             updateDirs.add(new CreateUpdate(inSourceDir, inTargetDir));
             allDocs.add(new Doc(inTargetDir));
         } else if (mbIndex > -1) {
-            newContent = fs.readTextFile(inSourceDir, "i.html");
+            newContent = fs.readTextFile(new Dir(ingestDir, inSourceDir), "i.html");
             createDirs.add(new CreateUpdate(inSourceDir, inTargetDir, newContent));
             allDocs.add(new Doc(inTargetDir));
         }
@@ -284,22 +285,20 @@ static String parseCreatedDate(String old) {
 void createNewDocs(Ingestion ing) {
     for (CreateUpdate cre : ing.createDocs) {
         String freshContent = buildDocument("", todayDt, cre.newContent);
-        String folderForDocument = Paths.get(blogDir, cre.targetDir).toString();
-        fs.saveOverwriteFile(Paths.get(blogDir, cre.targetDir).toString(), "i.html", freshContent);
+        fs.saveOverwriteFile(new Dir(blogDir, cre.targetDir), "i.html", freshContent);
     }
 }
 
 void updateDocs(Ingestion ing) {
     for (CreateUpdate upd : ing.updateDocs) {
-
-        String oldContent = fs.readTextFile(upd.targetDir, "i.html");
+        String oldContent = fs.readTextFile(new Dir(blogDir, upd.targetDir), "i.html");
         String updatedContent = buildDocument(oldContent, todayDt, upd.newContent);
     }
 }
 
 void deleteDocs(Ingestion ing) {
-    for (String toDel : ing.deleteDocs) {
-        fs.deleteDirIfExists(toDel);
+    for (Subfolder toDel : ing.deleteDocs) {
+        fs.deleteDirIfExists(new Dir(blogDir, toDel));
     }
 }
 
@@ -357,8 +356,8 @@ static class Ingestion {
     L<Doc> allDocs;
     NavTree nav;
 
-    public Ingestion(L<CreateUpdate> createDirs, L<CreateUpdate> updateDirs, L<String> deleteDirs,
-                     L<Doc> allDirs) {
+    public Ingestion(L<CreateUpdate> createDirs, L<CreateUpdate> updateDirs,
+            L<Subfolder> deleteDirs, L<Doc> allDirs) {
         print("Ingestion constructor, count of create " + createDirs.size()
                 + ", updateDocs count = " + updateDirs.size() + ", deleteDocs count = "
                 + deleteDirs.size() + ", allDirs = " + allDirs.size());
@@ -400,7 +399,7 @@ static class Ingestion {
             }
             for (int j = lenSamePrefix + 1; j < spl.size(); j++) {
                 var newElem = (j == spl.size() - 1)
-                                ? new NavTree(docsByName.get(i).targetDir, new L())
+                                ? new NavTree(docsByName.get(i).targetDir.cont, new L())
                                 : new NavTree(spl.get(j), new L());
                 if (j + 1 < st.size())  {
                     st.set(j + 1, newElem);
@@ -543,8 +542,8 @@ static class FileInfo {
 interface FileSys {
     boolean dirExists(Dir dir);
     L<FileInfo> listFiles(Dir dir); // immediate files in a dir
-    L<String> listSubfolders(Dir dir); // full names of immediate child dirs
-    L<String> listSubfoldersContaining(Dir dir, String fN); // recursively list all nested dirs
+    L<Subfolder> listSubfolders(Dir dir); // immediate subfolders of child dirs
+    L<Subfolder> listSubfoldersContaining(Dir dir, String fN); // recursively list all nested dirs
     L<String> getNamesWithPrefix(Dir dir, String prefix);
     String readTextFile(Dir dir, String fN);
     boolean createDir(Dir dir);

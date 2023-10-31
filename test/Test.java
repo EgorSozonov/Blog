@@ -45,25 +45,28 @@ static class MockFileSys implements FileSys {
     }
 
     @Override
-    public L<String> listSubfolders(Dir dir) {
+    public L<Subfolder> listSubfolders(Dir dir) {
         String dirWithSl = (dir.cont.endsWith("/")) ? dir.cont : (dir.cont + "/");
-        L<String> subfolders = new L();
+        int prefixLength = dirWithSl.length();
+        L<Subfolder> result = new L();
         for (String key : fs.keySet()) {
             if (key.startsWith(dirWithSl)) {
-                subfolders.add(key);
+                result.add(new Subfolder(key.substring(prefixLength)));
             }
         }
-        return subfolders; 
+        return result; 
     }
     
     @Override
 
-    public L<String> listSubfoldersContaining(Dir dir, String fN) {
+    public L<Subfolder> listSubfoldersContaining(Dir dir, String fN) {
         /// Gets the list of directories containing a filename, for example "i.html"
-        L<String> result = new L(10);
+        String dirWithSl = (dir.cont.endsWith("/")) ? dir.cont : (dir.cont + "/");
+        int prefixLength = dirWithSl.length();
+        L<Subfolder> result = new L(10);
         for (var e : fs.entrySet()) {
             if (e.getKey().startsWith(dir.cont) && e.getValue().any(x -> x.name.equals("i.html"))) {
-                result.add(e.getKey());
+                result.add(new Subfolder(e.getKey().substring(prefixLength)));
             }
         }
         return result;
@@ -301,7 +304,7 @@ static void testSaveFile() {
 
 static void testFilePrefixes() {
     FileSys fs = new MockFileSys();
-    Dir target = new Dir(blogDir.toAbsolute(), new Subfolder("a/b"));
+    Dir target = new Dir(blogDir, new Subfolder("a/b"));
     fs.saveOverwriteFile(target, "myFile.txt", "An ode to joy");
     fs.saveOverwriteFile(target, "myFile-2.txt", "An ode to joy 2");
     fs.saveOverwriteFile(target, "myFile-3.txt", "An ode to joy 3");
@@ -372,7 +375,7 @@ static void createNewDoc() {
     fs.saveOverwriteFile(blogDir, "script.js", "Terms of Use");
     fs.saveOverwriteFile(blogDir, "style.css", "Terms of Use");
     fs.saveOverwriteFile(blogDir, "blog.html", "Terms of Use");
-    fs.saveOverwriteFile(inDir + "/a.b.c", "i.html", """
+    fs.saveOverwriteFile(new Dir(inDir, new Subfolder("a.b.c")), "i.html", """
 <html>
 <head>
 </head>
@@ -397,7 +400,7 @@ static void createNewDoc() {
 </html>
     """;
 
-    String pathNewDoc = Paths.get(blogDir, "a", "b", "c").toString();
+    Dir pathNewDoc = new Dir(blogDir, new Subfolder("a/b/c"));
     L<FileInfo> result = fs.listFiles(pathNewDoc);
     print("size " + result.size() + ", name " + result.get(0).name); 
     blAssert(result.size() == 1 && result.get(0).name.equals("i.html")); 
