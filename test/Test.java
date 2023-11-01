@@ -390,8 +390,10 @@ static void createNewDoc() {
     String expectedContent = """
 <html>
 <head>
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; base-uri 'self';" />
+    <script type="text/javascript" src="/blog/script.js"></script>
     <style "style.css">
-    <script "script.js">
 </head>
 <body>
 <!-- Dates --><div>Created: 2023-04-05, updated: 2023-04-06</div><!-- / -->

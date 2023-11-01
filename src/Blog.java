@@ -65,11 +65,10 @@ public Blog(FileSys fs)  {
 }
 
 void ingestCore() {
-    String dir = Paths.get(ingestDir).toString();
-    if (!fs.dirExists(dir))  {
+    if (!fs.dirExists(ingestDir))  {
         return;
     }
-    var files = fs.listFiles(dir);
+    var files = fs.listFiles(ingestDir);
     for (FileInfo fi : files) {
         String fN = fi.name;
         int indFixed = -1;
@@ -80,10 +79,10 @@ void ingestCore() {
         }
 
         if (indFixed > -1) {
-            String newVersionOfFixed = fs.moveFileToNewVersion(dir, fN, blogDir);
+            String newVersionOfFixed = fs.moveFileToNewVersion(ingestDir, fN, blogDir);
             coreVersions[indFixed] = newVersionOfFixed;
         } else if (fN.endsWith(".js")) {
-            String newVersionOfExtra = fs.moveFileToNewVersion(dir, fN, blogDir);
+            String newVersionOfExtra = fs.moveFileToNewVersion(ingestDir, fN, blogDir);
             globalVersions.put(shaveOffExtension(fN), newVersionOfExtra);
 
         }
@@ -128,11 +127,11 @@ Ingestion buildIngestion() {
         Subfolder inSourceDir = ingestDirs.get(i);
         Subfolder inTargetDir = targetDirs.get(i);
         String newContent = "";
-        var inFiles = fs.listFiles(inSourceDir);
+        var inFiles = fs.listFiles(new Dir(ingestDir, inSourceDir));
         int mbIndex = inFiles.findIndex(x -> x.name.equals("i.html"));
         if (oldDirs.contains(inTargetDir)) {
             if (mbIndex > -1) {
-                newContent = fs.readTextFile(inSourceDir, "i.html");
+                newContent = fs.readTextFile(new Dir(ingestDir, inSourceDir), "i.html");
                 if (newContent.length() <= 1) {
                     // a 0- or 1-byte long i.html means "delete this document"
                     deleteDirs.add(inTargetDir);
@@ -282,12 +281,14 @@ static String parseCreatedDate(String old) {
     return datePart.substring(14, 24); // Skipping length of `<div>Created: `
 }
 
+
 void createNewDocs(Ingestion ing) {
     for (CreateUpdate cre : ing.createDocs) {
         String freshContent = buildDocument("", todayDt, cre.newContent);
         fs.saveOverwriteFile(new Dir(blogDir, cre.targetDir), "i.html", freshContent);
     }
 }
+
 
 void updateDocs(Ingestion ing) {
     for (CreateUpdate upd : ing.updateDocs) {
@@ -296,16 +297,18 @@ void updateDocs(Ingestion ing) {
     }
 }
 
+
 void deleteDocs(Ingestion ing) {
     for (Subfolder toDel : ing.deleteDocs) {
         fs.deleteDirIfExists(new Dir(blogDir, toDel));
     }
 }
 
-static String convertToTargetDir(String ingestDir) {
-    /// Changes an ingestion dir like "a.b.foo" to the nested subfolder "a/b/foo"
-    String dirParts = ingestDir.replace(" ", "").replace(".", "/");
-    return Paths.get(dirParts).toString();
+
+static Subfolder convertToTargetDir(Subfolder ingestDir) {
+    /// Changes an ingestion subfolder like "a.b.foo" to the nested subfolder "a/b/foo"
+    String dirParts = ingestDir.cont.replace(" ", "").replace(".", "/");
+    return new Subfolder(Paths.get(dirParts).toString());
 }
 
 

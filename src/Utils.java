@@ -471,14 +471,20 @@ static String monthNameOf(String dt) {
 
 public static class Dir {
     public String cont;
+    
     public Dir(Dir absDir, Subfolder subf)  {
         this.cont = Paths.get(absDir.cont, subf.cont).toString();
+    }
+    
+    private Dir(String s)  {
+        this.cont = Paths.get(s).toString();
     }
     
     public static Dir ofString(String absPath)  {
         if (!absPath.startsWith("/")) {
             throw new RuntimeException("An absolute path must start with `/`!");
         }
+        return new Dir(absPath);
     }
 }
 
@@ -490,9 +496,9 @@ public static class Subfolder {
     }
 }
 
-public static Subfolder glueSubf(Subfolder... subfolders) {
-    return new Subfolder(Paths.get(subfolders).toString());
-}
+//~public static Subfolder glueSubf(Subfolder... subfolders) {
+//~    return new Subfolder(Paths.get(subfolders).toString());
+//~}
 
 //}}}
 }
