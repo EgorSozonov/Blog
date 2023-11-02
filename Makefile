@@ -39,7 +39,7 @@ _bin/test: | _bin
 test: ## Run unit tests
 / echo 'testing'
 / javac -d '$(TESTDIR)' src/Blog.java src/Utils.java test/Test.java
-/ jar -c -v -f $(TESTDIR)/test.jar -e tech.sozonov.blog.Test -C $(TESTDIR) tech/sozonov/blog
+/ jar -c -f $(TESTDIR)/test.jar -e tech.sozonov.blog.Test -C $(TESTDIR) tech/sozonov/blog
 / java -jar $(TESTDIR)/test.jar
 
 

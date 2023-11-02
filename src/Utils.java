@@ -290,6 +290,17 @@ static final class L<T> implements List<T> {
         }
         return -1;
     }
+   
+    public void append(L<T> other) {
+        if (other.isEmpty()) {
+            return;
+        }
+        ensureCapacity(size + other.size());
+        for (int j = 0, i = size; j < other.size(); j++, i++) {
+            data[i] = other.get(j);
+        }
+        size += other.size(); 
+    }
 
     public <U> L<U> trans(Function<T, U> transformer) {
         L<U> result = new L(this.size);
@@ -493,6 +504,16 @@ public static class Subfolder {
     public String cont;
     public Subfolder(String cont) {
         this.cont = cont;
+    }
+    
+    @Override
+    public boolean equals(Object o) {
+        return this.cont.equals(((Subfolder)o).cont);
+    }
+    
+    @Override
+    public int hashCode() {
+        return this.cont.hashCode();
     }
 }
 

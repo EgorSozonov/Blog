@@ -114,35 +114,42 @@ void ingestDocs() {
     deleteDocs(ing);
 }
 
+
 Ingestion buildIngestion() {
     L<CreateUpdate> createDirs = new L();
     L<CreateUpdate> updateDirs = new L();
     L<Subfolder> deleteDirs = new L();
     L<Doc> allDocs = new L();
     Set<Subfolder> oldDirs = fs.listSubfoldersContaining(blogDir, "i.html").toSet();
+    for (var s : oldDirs)  {
+        print(s.cont);
+    }
 
     L<Subfolder> ingestDirs = fs.listSubfolders(ingestDir);
     L<Subfolder> targetDirs = ingestDirs.trans(x -> convertToTargetDir(x));
     for (int i = 0; i < ingestDirs.size(); i++) {
-        Subfolder inSourceDir = ingestDirs.get(i);
+        Subfolder inSourceSubf = ingestDirs.get(i);
+        Dir inSourceDir = new Dir(ingestDir, inSourceSubf);
         Subfolder inTargetDir = targetDirs.get(i);
         String newContent = "";
-        var inFiles = fs.listFiles(new Dir(ingestDir, inSourceDir));
+        var inFiles = fs.listFiles(inSourceDir);
         int mbIndex = inFiles.findIndex(x -> x.name.equals("i.html"));
         if (oldDirs.contains(inTargetDir)) {
             if (mbIndex > -1) {
-                newContent = fs.readTextFile(new Dir(ingestDir, inSourceDir), "i.html");
+                newContent = fs.readTextFile(inSourceDir, "i.html");
                 if (newContent.length() <= 1) {
                     // a 0- or 1-byte long i.html means "delete this document"
                     deleteDirs.add(inTargetDir);
                     continue;
                 }
+                updateDirs.add(new CreateUpdate(inSourceSubf, inTargetDir, newContent));
+            } else {
+                updateDirs.add(new CreateUpdate(inSourceSubf, inTargetDir));
             }
-            updateDirs.add(new CreateUpdate(inSourceDir, inTargetDir));
             allDocs.add(new Doc(inTargetDir));
         } else if (mbIndex > -1) {
-            newContent = fs.readTextFile(new Dir(ingestDir, inSourceDir), "i.html");
-            createDirs.add(new CreateUpdate(inSourceDir, inTargetDir, newContent));
+            newContent = fs.readTextFile(inSourceDir, "i.html");
+            createDirs.add(new CreateUpdate(inSourceSubf, inTargetDir, newContent));
             allDocs.add(new Doc(inTargetDir));
         }
     }
@@ -165,12 +172,21 @@ String buildDocument(String old, String updatedDt, String newContent) {
     String dateStamp = buildDateStamp(createdDt, updatedDt);
 
     L<String> globalScripts = new L();
+    int indBody = mainSource.indexOf("<body>");
+    if (indBody < 0) {
+        throw new RuntimeException("Body not found in the HTML document");
+    }
+    String body = mainSource.substring(indBody);
+
     boolean hasLocalScript = parseHead(mainSource, globalScripts);
-    L<Substitution> subs = parseBodySubstitutions(mainSource, dateStamp);
+    L<Substitution> subs = parseBodySubstitutions(body, dateStamp);
+    for (var s : subs)  {
+        print("Subst from byte " + s.startByte + " to " + s.endByte);
+    }
 
     var result = new StringBuilder();
     buildHead(hasLocalScript, globalScripts, result);
-    buildBody(mainSource, subs, result);
+    buildBody(body, subs, result);
     return result.toString();
 }
 
@@ -192,14 +208,15 @@ void buildHead(boolean hasLocalScript, L<String> globalScripts, StringBuilder re
 }
 
 
-static void buildBody(String html, L<Substitution> subs, StringBuilder result) {
-    int curr = html.indexOf("<body>");
+static void buildBody(String body, L<Substitution> subs, StringBuilder result) {
+    print("body " + body);
+    int curr = 6; // 6 for the `<body>`
     for (var sub : subs) {
-        result.append(html.substring(curr, sub.startByte));
-        result.append(sub.replacement);
+        result.append(body.substring(curr, sub.startByte));
+        result.append(sub.text);
         curr = sub.endByte;
     }
-    result.append(html.substring(curr, html.length()));
+    result.append(body.substring(curr, body.length()));
 }
 
 
@@ -217,8 +234,9 @@ static boolean parseHead(String old, /* out */ L<String> globalCoreScripts) {
     int start = old.indexOf("<head>");
     int end = old.indexOf("</head>");
     String head = old.substring(start + 6, end);
-    L<String> scripts = parseSrcAttribs(head, "script");
-    for (String scrName : scripts) {
+    L<Substitution> scripts = parseSrcAttribs(head, "script");
+    for (var script : scripts) {
+        String scrName = script.text;
         if (!scrName.endsWith(".js")) {
             throw new RuntimeException("Script extension must be .js!");
         }
@@ -235,12 +253,10 @@ static boolean parseHead(String old, /* out */ L<String> globalCoreScripts) {
 }
 
 
-static L<Substitution> parseBodySubstitutions(String mainSource, String dateStamp) {
+static L<Substitution> parseBodySubstitutions(String body, String dateStamp) {
     /// Produces a list of substitutions sorted by start byte.
     L<Substitution> result = new L();
-    int start = mainSource.indexOf("<body>") + 6; // +6 for the length of `<body>`
-    int end = mainSource.indexOf("</body>");
-    String body = mainSource.substring(start, end);
+    int start = 6; // 6 for the length of `<body>`
 
     // the date stamp
     int indStampOpen = body.indexOf(stampOpen);
@@ -250,13 +266,14 @@ static L<Substitution> parseBodySubstitutions(String mainSource, String dateStam
         int indStampClose = body.indexOf(stampClose);
         result.add(new Substitution(indStampOpen, indStampClose + stampClose.length(), dateStamp));
     }
+    result.append(parseSrcAttribs(body, "img"));
     return result;
 }
 
 
-static L<String> parseSrcAttribs(String html, String tag) {
+static L<Substitution> parseSrcAttribs(String html, String tag) {
     /// (`<foo src="asdf">` `foo`) => `asdf`
-    L<String> result = new L();
+    L<Substitution> result = new L();
     String opener = "<" + tag;
     int ind = html.indexOf(opener);
     while (ind > -1) {
@@ -267,7 +284,7 @@ static L<String> parseSrcAttribs(String html, String tag) {
         int indSrc = html.indexOf("src=\"", ind) + 5;
         int indEndSrc = html.indexOf("\"", indSrc); // 5 for the `src="`
         String attrib = html.substring(indSrc, indEndSrc);
-        result.add(attrib);
+        result.add(new Substitution(indSrc, indEndSrc, attrib));
         ind = html.indexOf(opener, ind + 1);
     }
     return result;
@@ -295,6 +312,7 @@ void updateDocs(Ingestion ing) {
     for (CreateUpdate upd : ing.updateDocs) {
         String oldContent = fs.readTextFile(new Dir(blogDir, upd.targetDir), "i.html");
         String updatedContent = buildDocument(oldContent, todayDt, upd.newContent);
+        fs.saveOverwriteFile(new Dir(blogDir, upd.targetDir), "i.html", updatedContent);
     }
 }
 
@@ -373,7 +391,6 @@ static class Ingestion {
     }
 
     NavTree buildThematic(L<Doc> allDirs) {
-        print("BuildThematic, count of allDirs " + allDirs.size());
         Collections.sort(allDirs, (x, y) ->{
             int folderLengthCommon = Math.min(x.spl.size(), y.spl.size());
             for (int i = 0; i < folderLengthCommon; i++) {
@@ -527,7 +544,7 @@ static class DocBuild {
 }
 
 
-record Substitution(int startByte, int endByte, String replacement) {}
+record Substitution(int startByte, int endByte, String text) {}
 
 
 //}}}

@@ -63,7 +63,8 @@ static class MockFileSys implements FileSys {
         int prefixLength = dirWithSl.length();
         L<Subfolder> result = new L(10);
         for (var e : fs.entrySet()) {
-            if (e.getKey().startsWith(dir.cont) && e.getValue().any(x -> x.name.equals("i.html"))) {
+            if (e.getKey().startsWith(dirWithSl)
+                    && e.getValue().any(x -> x.name.equals("i.html"))) {
                 result.add(new Subfolder(e.getKey().substring(prefixLength)));
             }
         }
@@ -434,7 +435,7 @@ static void updateDoc() {
     fs.saveOverwriteFile(pathExistingDoc, "local-2.js", "old local script");
     fs.saveOverwriteFile(pathExistingDoc, "myImg.png", "old image");
     fs.saveOverwriteFile(pathExistingDoc, "i.html",
-            "<body><!-- Dates --><div>Created: 2023-04-05</div><!-- / --></body>");
+            "<head></head><body><!-- Dates --><div>Created: 2023-04-05</div><!-- / --></body>");
     Dir docDir = new Dir(ingestDir, new Subfolder("a.b.c"));
     createSimpleDocForTest(fs, docDir);
     fs.saveOverwriteFile(docDir, "local.js", "new local script");
@@ -453,7 +454,7 @@ static void updateDoc() {
     <script type="text/javascript" src="local-3.js"></script>
     <link rel="stylesheet" href="/blog/style.css" />
 </head>
-<body><!-- Dates --><div>Created:""" + " " + nowStamp + ", updated: " + nowStamp + """
+<body><!-- Dates --><div>Created: 2023-04-05, updated: """ + nowStamp + """
 </div><!-- / -->
     <div>Hello world!</div><img src="myImg-2.png">
 </body>
@@ -468,7 +469,6 @@ static void updateDoc() {
 }
 
 public static void main(String[] args) {
-    System.out.println("Hw");
     TestResults counters = new TestResults();
 
 //~    runTest(Test::testSaveFile, counters);
