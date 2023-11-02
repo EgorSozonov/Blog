@@ -24,8 +24,6 @@ import static tech.sozonov.blog.Blog.*;
 
 class Test {
 
-static DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-
 //{{{ MockFileSys
 
 static class MockFileSys implements FileSys {
@@ -54,9 +52,9 @@ static class MockFileSys implements FileSys {
                 result.add(new Subfolder(key.substring(prefixLength)));
             }
         }
-        return result; 
+        return result;
     }
-    
+
     @Override
 
     public L<Subfolder> listSubfoldersContaining(Dir dir, String fN) {
@@ -254,6 +252,10 @@ static void printIngestion(Ingestion ing) {
 
 }
 
+//~static String stringDiff(String a, String b) {
+//~
+//~}
+
 static void runTest(Action theTest, TestResults counters) {
     try {
         theTest.run();
@@ -366,48 +368,102 @@ static void parseDateStamp() {
     blAssert(dateOld.equals("2023-04-05"));
 }
 
-static void createNewDoc() {
-    /// With core files in place, create a simple first doc
-    var fs = new MockFileSys();
-    Blog b = new Blog(fs);
-    Dir inDir = ingestDir;
+static void createSimpleDocForTest(FileSys fs, Dir docDir) {
     fs.saveOverwriteFile(blogDir, "termsOfUse.html", "Terms of Use");
     fs.saveOverwriteFile(blogDir, "script.js", "Terms of Use");
     fs.saveOverwriteFile(blogDir, "style.css", "Terms of Use");
     fs.saveOverwriteFile(blogDir, "blog.html", "Terms of Use");
-    fs.saveOverwriteFile(new Dir(inDir, new Subfolder("a.b.c")), "i.html", """
+    String inputContent = """
 <html>
 <head>
+    <script type="text/javascript" src="local.js"></script>
 </head>
 <body>
-    <div>Hello world!</div>
+    <div>Hello world!</div><img src="myImg.png">
 </body>
-</html>
-    """);
+</html>""";
+
+    fs.saveOverwriteFile(docDir, "myImg.png", "Some image content");
+    fs.saveOverwriteFile(docDir, "local.js", "Local script");
+    fs.saveOverwriteFile(docDir, "i.html", inputContent);
+}
+
+
+static void createNewDoc() {
+    /// With core files in place, create a simple first doc
+    var fs = new MockFileSys();
+    Blog b = new Blog(fs);
+    Dir docDir = new Dir(ingestDir, new Subfolder("a.b.c"));
+    createSimpleDocForTest(fs, docDir);
 
     b.ingestDocs();
-    
+
+    String nowStamp = formatter.format(Instant.now());
     String expectedContent = """
+<!DOCTYPE html>
 <html>
 <head>
     <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; script-src 'self'; base-uri 'self';" />
     <script type="text/javascript" src="/blog/script.js"></script>
-    <style "style.css">
+    <script type="text/javascript" src="local.js"></script>
+    <link rel="stylesheet" href="/blog/style.css" />
 </head>
-<body>
-<!-- Dates --><div>Created: 2023-04-05, updated: 2023-04-06</div><!-- / -->
-    <div>Hello world!</div>
+<body><!-- Dates --><div>Created:""" + " " + nowStamp + ", updated: " + nowStamp + """
+</div><!-- / -->
+    <div>Hello world!</div><img src="myImg.png">
 </body>
-</html>
-    """;
+</html>""";
 
     Dir pathNewDoc = new Dir(blogDir, new Subfolder("a/b/c"));
     L<FileInfo> result = fs.listFiles(pathNewDoc);
-    print("size " + result.size() + ", name " + result.get(0).name); 
-    blAssert(result.size() == 1 && result.get(0).name.equals("i.html")); 
+    print("size " + result.size() + ", name " + result.get(0).name);
+    blAssert(result.size() == 1 && result.get(0).name.equals("i.html"));
     String cont = fs.readTextFile(pathNewDoc, "i.html");
-    print(cont); 
+    blAssert(cont.equals(expectedContent));
+}
+
+
+static void updateDoc() {
+    /// Update a document with new content and new versions of local script and image
+    var fs = new MockFileSys();
+    Blog b = new Blog(fs);
+
+    Dir pathExistingDoc = new Dir(blogDir, new Subfolder("a/b/c"));
+    fs.saveOverwriteFile(pathExistingDoc, "local-2.js", "old local script");
+    fs.saveOverwriteFile(pathExistingDoc, "local-2.js", "old local script");
+    fs.saveOverwriteFile(pathExistingDoc, "myImg.png", "old image");
+    fs.saveOverwriteFile(pathExistingDoc, "i.html",
+            "<body><!-- Dates --><div>Created: 2023-04-05</div><!-- / --></body>");
+    Dir docDir = new Dir(ingestDir, new Subfolder("a.b.c"));
+    createSimpleDocForTest(fs, docDir);
+    fs.saveOverwriteFile(docDir, "local.js", "new local script");
+    fs.saveOverwriteFile(docDir, "myImg.png", "new image");
+
+    b.ingestDocs();
+
+    String nowStamp = formatter.format(Instant.now());
+    String expectedContent = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; base-uri 'self';" />
+    <script type="text/javascript" src="/blog/script.js"></script>
+    <script type="text/javascript" src="local-3.js"></script>
+    <link rel="stylesheet" href="/blog/style.css" />
+</head>
+<body><!-- Dates --><div>Created:""" + " " + nowStamp + ", updated: " + nowStamp + """
+</div><!-- / -->
+    <div>Hello world!</div><img src="myImg-2.png">
+</body>
+</html>""";
+
+    L<FileInfo> result = fs.listFiles(pathExistingDoc);
+    blAssert(result.size() == 3);
+    String cont = fs.readTextFile(pathExistingDoc, "i.html");
+    print("content:");
+    print(cont);
     blAssert(cont.equals(expectedContent));
 }
 
@@ -418,10 +474,13 @@ public static void main(String[] args) {
 //~    runTest(Test::testSaveFile, counters);
 //~    runTest(Test::testFilePrefixes, counters);
 //~    runTest(Test::testMaxVersion, counters);
+
 //~    runTest(Test::testIngestCore, counters);
 //~    runTest(Test::updateCore, counters);
 //~    runTest(Test::parseDateStamp, counters);
-    runTest(Test::createNewDoc, counters);
+
+//~    runTest(Test::createNewDoc, counters);
+    runTest(Test::updateDoc, counters);
 
     if (counters.countFailed > 0)  {
         System.out.println("Failed " + counters.countFailed + " tests");

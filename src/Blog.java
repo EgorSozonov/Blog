@@ -185,9 +185,10 @@ void buildHead(boolean hasLocalScript, L<String> globalScripts, StringBuilder re
         }
     }
     if (hasLocalScript) {
-        result.append("    <script type=\"text/javascript\" src=\"/blog/local.js\"></script>\n");
+        result.append("    <script type=\"text/javascript\" src=\"local.js\"></script>\n");
     }
-    result.append("</head>\n");
+    result.append("    <link rel=\"stylesheet\" href=\"/blog/style.css\" />");
+    result.append("\n</head>\n");
 }
 
 
@@ -267,7 +268,7 @@ static L<String> parseSrcAttribs(String html, String tag) {
         int indEndSrc = html.indexOf("\"", indSrc); // 5 for the `src="`
         String attrib = html.substring(indSrc, indEndSrc);
         result.add(attrib);
-        ind = html.indexOf(opener);
+        ind = html.indexOf(opener, ind + 1);
     }
     return result;
 }
