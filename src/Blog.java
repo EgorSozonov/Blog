@@ -157,7 +157,7 @@ Ingestion buildIngestion() {
 }
 
 
-String buildDocument(String old, String updatedDt, String newContent) {
+String buildDocument(Dir targetDir, String old, String updatedDt, String newContent) {
     if (old == "" && newContent == "") {
         throw new RuntimeException("Can't build a document with no inputs!");
     }
@@ -178,20 +178,20 @@ String buildDocument(String old, String updatedDt, String newContent) {
     }
     String body = mainSource.substring(indBody);
 
-    boolean hasLocalScript = parseHead(mainSource, globalScripts);
+    String localScriptName = parseHead(mainSource, targetDir, globalScripts);
     L<Substitution> subs = parseBodySubstitutions(body, dateStamp);
     for (var s : subs)  {
         print("Subst from byte " + s.startByte + " to " + s.endByte);
     }
 
     var result = new StringBuilder();
-    buildHead(hasLocalScript, globalScripts, result);
+    buildHead(localScriptName, globalScripts, result);
     buildBody(body, subs, result);
     return result.toString();
 }
 
 
-void buildHead(boolean hasLocalScript, L<String> globalScripts, StringBuilder result) {
+void buildHead(String localScriptName, L<String> globalScripts, StringBuilder result) {
     result.append(template0);
     result.append("    <script type=\"text/javascript\" src=\"/blog/script.js\"></script>\n");
     for (String gs : globalScripts) {
@@ -200,8 +200,9 @@ void buildHead(boolean hasLocalScript, L<String> globalScripts, StringBuilder re
                     + globalVersions.get(gs) + "\"></script>\n");
         }
     }
-    if (hasLocalScript) {
-        result.append("    <script type=\"text/javascript\" src=\"local.js\"></script>\n");
+    if (localScriptName.length() > 0) {
+        result.append("    <script type=\"text/javascript\" src=\"" + localScriptName
+                + "\"></script>\n");
     }
     result.append("    <link rel=\"stylesheet\" href=\"/blog/style.css\" />");
     result.append("\n</head>\n");
@@ -227,10 +228,10 @@ static String buildDateStamp(String createdDt, String updatedDt) {
 }
 
 
-static boolean parseHead(String old, /* out */ L<String> globalCoreScripts) {
+String parseHead(String old, Dir targetDir, /* out */ L<String> globalCoreScripts) {
     /// Parses the <head> tag of the old HTML and determines if it has the local script "local.js"
     /// as well as the list of core extra scripts this document requires
-    boolean hasLocal = false;
+    String localScriptName = "";
     int start = old.indexOf("<head>");
     int end = old.indexOf("</head>");
     String head = old.substring(start + 6, end);
@@ -243,13 +244,14 @@ static boolean parseHead(String old, /* out */ L<String> globalCoreScripts) {
         if (scrName.startsWith("../")) {
             globalCoreScripts.add(shaveOffExtension(scrName.substring(3))); // 3 for the `../`
         } else if (scrName.equals("local.js")) {
-            hasLocal = true;
+            L<String> existingLocals = fs.getNamesWithPrefix(targetDir, "local");
+            localScriptName = getNameWithMaxVersion(existingLocals).f1;
         } else {
             throw new
                 RuntimeException("Scripts must either start with `../` or be named `local.js`!");
         }
     }
-    return hasLocal;
+    return localScriptName;
 }
 
 
@@ -302,7 +304,8 @@ static String parseCreatedDate(String old) {
 
 void createNewDocs(Ingestion ing) {
     for (CreateUpdate cre : ing.createDocs) {
-        String freshContent = buildDocument("", todayDt, cre.newContent);
+        Dir targetDir = new Dir(blogDir, cre.targetDir);
+        String freshContent = buildDocument(targetDir, "", todayDt, cre.newContent);
         fs.saveOverwriteFile(new Dir(blogDir, cre.targetDir), "i.html", freshContent);
     }
 }
@@ -310,8 +313,9 @@ void createNewDocs(Ingestion ing) {
 
 void updateDocs(Ingestion ing) {
     for (CreateUpdate upd : ing.updateDocs) {
-        String oldContent = fs.readTextFile(new Dir(blogDir, upd.targetDir), "i.html");
-        String updatedContent = buildDocument(oldContent, todayDt, upd.newContent);
+        Dir targetDir = new Dir(blogDir, upd.targetDir);
+        String oldContent = fs.readTextFile(targetDir, "i.html");
+        String updatedContent = buildDocument(targetDir, oldContent, todayDt, upd.newContent);
         fs.saveOverwriteFile(new Dir(blogDir, upd.targetDir), "i.html", updatedContent);
     }
 }

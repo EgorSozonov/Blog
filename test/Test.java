@@ -432,7 +432,6 @@ static void updateDoc() {
 
     Dir pathExistingDoc = new Dir(blogDir, new Subfolder("a/b/c"));
     fs.saveOverwriteFile(pathExistingDoc, "local-2.js", "old local script");
-    fs.saveOverwriteFile(pathExistingDoc, "local-2.js", "old local script");
     fs.saveOverwriteFile(pathExistingDoc, "myImg.png", "old image");
     fs.saveOverwriteFile(pathExistingDoc, "i.html",
             "<head></head><body><!-- Dates --><div>Created: 2023-04-05</div><!-- / --></body>");
