@@ -477,8 +477,19 @@ static String monthNameOf(String dt) {
     return months[monthNum - 1];
 }
 
+
+static L<String> getNamesWithPrefix(UnvName fn, L<FileInfo> existingFiles) {
+    /// fN should be full (with extension)
+    String fnWoExt = shaveOffExtension(fn.cont) + "-";
+    String ext = fn.cont.substring(fnWoExt.length() - 1);
+    return existingFiles
+            .transIf(x -> x.name.equals(fn.cont)
+                        || (x.name.startsWith(fnWoExt) && x.name.endsWith(ext)),
+                    y -> y.name);
+}
+
 //}}}
-//{{{ Directories
+//{{{ Directories and files
 
 public static class Dir {
     public String cont;
@@ -517,9 +528,73 @@ public static class Subfolder {
     }
 }
 
-//~public static Subfolder glueSubf(Subfolder... subfolders) {
-//~    return new Subfolder(Paths.get(subfolders).toString());
-//~}
+static class UnvName {
+    /// An unversioned file name, so if the whole name is "asdf-11.jpg", this will be "asdf.jpg"
+    String cont;
+    UnvName(String fn) {
+        String withoutExt = shaveOffExtension(fn);
+        int indDash = withoutExt.lastIndexOf("-");
+        if (indDash < 0) {
+            this.cont = fn;
+            return;
+        }
+        this.cont = withoutExt.substring(0, indDash) + fn.substring(withoutExt.length());
+    }
+
+    String toVersion(int n) {
+        String withoutExt = shaveOffExtension(this.cont);
+        return withoutExt
+                + "-" + Integer.toString(n) + this.cont.substring(withoutExt.length() + 1);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return this.cont.equals(((UnvName)o).cont);
+    }
+
+    @Override
+    public int hashCode() {
+        return this.cont.hashCode();
+    }
+}
+
+//}}}
+//{{{ Filesys
+
+static class FileInfo {
+    String name;
+    Instant modified;
+
+    public FileInfo(String name, Instant modif)  {
+        this.name = name;
+        this.modified = modif;
+    }
+}
+
+interface FileSys {
+    boolean dirExists(Dir dir);
+    L<FileInfo> listFiles(Dir dir); // immediate files in a dir
+    L<Subfolder> listSubfolders(Dir dir); // immediate subfolders of child dirs
+    L<Subfolder> listSubfoldersContaining(Dir dir, String fN); // recursively list all nested dirs
+    String readTextFile(Dir dir, String fN);
+    boolean createDir(Dir dir);
+    boolean saveOverwriteFile(Dir dir, String fN, String cont);
+    boolean moveFile(Dir dir, String fN, Dir targetDir);
+    boolean moveFileWithRename(Dir dir, String fN, Dir targetDir, String newName);
+    boolean deleteIfExists(Dir dir, String fN);
+    boolean deleteDirIfExists(Dir dir);
+}
+
+
+// Implementation
+//~    try (Stream<Path> walk = Files.walk(Paths.get(blogDir))) {
+//~        walk.filter(Files::isDirectory)
+//~            .forEach(x -> {
+//~                oldDirs.add(x.toString());
+//~            });
+//~    } catch (Exception e) {
+//~        System.out.println(e.getMessage());
+//~    }
 
 //}}}
 }

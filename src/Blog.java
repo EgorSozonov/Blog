@@ -69,28 +69,30 @@ void ingestCore() {
         return;
     }
     var files = fs.listFiles(ingestDir);
+    var existingFiles = fs.listFiles(blogDir);
     for (FileInfo fi : files) {
-        String fN = fi.name;
+        String fn = fi.name;
         int indFixed = -1;
         for (int j = 0; j < fixedCoreFiles.length; j++)  {
-            if (fixedCoreFiles[j].equals(fN)) {
+            if (fixedCoreFiles[j].equals(fn)) {
                 indFixed = j;
             }
         }
 
         if (indFixed > -1) {
-            String newVersionOfFixed = fs.moveFileToNewVersion(ingestDir, fN, blogDir);
+            String newVersionOfFixed = makeNameBumpedVersion(new UnvName(fn), existingFiles);
+            fs.moveFileWithRename(ingestDir, fn, blogDir, newVersionOfFixed);
             coreVersions[indFixed] = newVersionOfFixed;
-        } else if (fN.endsWith(".js")) {
-            String newVersionOfExtra = fs.moveFileToNewVersion(ingestDir, fN, blogDir);
-            globalVersions.put(shaveOffExtension(fN), newVersionOfExtra);
-
+        } else if (fn.endsWith(".js")) {
+            String newVersionOfExtra = makeNameBumpedVersion(new UnvName(fn), existingFiles);
+            fs.moveFileWithRename(ingestDir, fn, blogDir, newVersionOfExtra);
+            globalVersions.put(shaveOffExtension(fn), newVersionOfExtra);
         }
     }
     for (int i = 0; i < fixedCoreFiles.length; i++) {
         if (coreVersions[i] == null) {
-            L<String> existingNames = fs.getNamesWithPrefix(blogDir,
-                    shaveOffExtension(fixedCoreFiles[i]));
+            L<String> existingNames =
+                    getNamesWithPrefix(new UnvName(fixedCoreFiles[i]), existingFiles);
             if (existingNames.size() == 0)  {
                 print("Error, no core fixed file found for " + fixedCoreFiles[i]);
                 return;
@@ -116,52 +118,94 @@ void ingestDocs() {
 
 
 Ingestion buildIngestion() {
-    L<CreateUpdate> createDirs = new L();
-    L<CreateUpdate> updateDirs = new L();
-    L<Subfolder> deleteDirs = new L();
-    L<Doc> allDocs = new L();
+    /// Moves the local files and builds the full document lists
+    Ingestion ing = new Ingestion();
     Set<Subfolder> oldDirs = fs.listSubfoldersContaining(blogDir, "i.html").toSet();
-    for (var s : oldDirs)  {
-        print(s.cont);
-    }
 
     L<Subfolder> ingestDirs = fs.listSubfolders(ingestDir);
     L<Subfolder> targetDirs = ingestDirs.trans(x -> convertToTargetDir(x));
     for (int i = 0; i < ingestDirs.size(); i++) {
         Subfolder inSourceSubf = ingestDirs.get(i);
         Dir inSourceDir = new Dir(ingestDir, inSourceSubf);
-        Subfolder inTargetDir = targetDirs.get(i);
+        Subfolder inTargetSubf = targetDirs.get(i);
+        Dir inTargetDir = new Dir(blogDir, inTargetSubf);
+
         String newContent = "";
         var inFiles = fs.listFiles(inSourceDir);
         int mbIndex = inFiles.findIndex(x -> x.name.equals("i.html"));
-        if (oldDirs.contains(inTargetDir)) {
+        if (mbIndex > -1) {
+            newContent = fs.readTextFile(inSourceDir, "i.html");
+            if (newContent.length() <= 1) {
+                // a 0- or 1-byte long i.html means "delete this document"
+                ing.deleteDocs.add(inTargetSubf);
+                continue;
+            }
+        }
+        LocalFiles localFiles = moveAndReadLocalFiles(inFiles, inSourceDir, inTargetDir);
+        if (oldDirs.contains(inTargetSubf)) {
             if (mbIndex > -1) {
                 newContent = fs.readTextFile(inSourceDir, "i.html");
-                if (newContent.length() <= 1) {
-                    // a 0- or 1-byte long i.html means "delete this document"
-                    deleteDirs.add(inTargetDir);
-                    continue;
-                }
-                updateDirs.add(new CreateUpdate(inSourceSubf, inTargetDir, newContent));
+                ing.updateDocs.add(
+                        new CreateUpdate(inSourceSubf, inTargetSubf, localFiles, newContent));
             } else {
-                updateDirs.add(new CreateUpdate(inSourceSubf, inTargetDir));
+                ing.updateDocs.add(new CreateUpdate(inSourceSubf, inTargetSubf, localFiles));
             }
-            allDocs.add(new Doc(inTargetDir));
+            ing.allDocs.add(new Doc(inTargetSubf));
         } else if (mbIndex > -1) {
             newContent = fs.readTextFile(inSourceDir, "i.html");
-            createDirs.add(new CreateUpdate(inSourceSubf, inTargetDir, newContent));
-            allDocs.add(new Doc(inTargetDir));
+            ing.createDocs.add(
+                    new CreateUpdate(inSourceSubf, inTargetSubf, localFiles, newContent));
+            ing.allDocs.add(new Doc(inTargetSubf));
         }
     }
-    return new Ingestion(createDirs, updateDirs, deleteDirs, allDocs);
+    return ing;
 }
 
 
-String buildDocument(Dir targetDir, String old, String updatedDt, String newContent) {
-    if (old == "" && newContent == "") {
+LocalFiles moveAndReadLocalFiles(L<FileInfo> inFiles, Dir inSourceDir, Dir inTargetDir) {
+    /// Determines the new filenames for all local files of a document (the script if any,
+    /// and the media files)
+    LocalFiles result = new LocalFiles();
+    Map<UnvName, Tu<Integer, L<String>>> versions = new HashMap();
+    // fn -> (maxEncounteredVersion deleteList)
+
+    var existingFiles = fs.listFiles(inTargetDir);
+    for (var fInfo : inFiles) {
+        UnvName fn = new UnvName(fInfo.name);
+        String newVersion = makeNameBumpedVersion(fn, existingFiles);
+        fs.moveFileWithRename(inSourceDir, fInfo.name, inTargetDir, newVersion);
+        //result.versions.put(fn, newVersion);
+    }
+    existingFiles = fs.listFiles(inTargetDir);
+    for (var f : existingFiles) {
+        UnvName unvName = new UnvName(f.name);
+        int version = getFileVersion(f.name);
+        if (versions.containsKey(unvName)) {
+            Tu<Integer, L<String>> v = versions.get(unvName);
+            if (version > v.f1) {
+                v.f1 = version;
+                v.f2.add(result.versions.get(unvName));
+                result.versions.put(unvName, f.name);
+            } else {
+                v.f2.add(f.name);
+            }
+        } else {
+            versions.put(unvName, new Tu(version, new L()));
+            result.versions.put(unvName, f.name);
+        }
+    }
+    for (Tu<Integer, L<String>> v : versions.values()) {
+        result.filesToDelete.append(v.f2);
+    }
+    return result;
+}
+
+
+String buildDocument(CreateUpdate createUpdate, String old, String updatedDt) {
+    if (old == "" && createUpdate.newContent == "") {
         throw new RuntimeException("Can't build a document with no inputs!");
     }
-    String mainSource = (newContent != "") ? newContent : old;
+    String mainSource = (createUpdate.newContent != "") ? createUpdate.newContent : old;
     String createdDt = "";
     if (old == "") {
         createdDt = updatedDt;
@@ -178,7 +222,8 @@ String buildDocument(Dir targetDir, String old, String updatedDt, String newCont
     }
     String body = mainSource.substring(indBody);
 
-    String localScriptName = parseHead(mainSource, targetDir, globalScripts);
+    String localScriptName =
+            parseHead(mainSource, new Dir(blogDir, createUpdate.targetDir), globalScripts);
     L<Substitution> subs = parseBodySubstitutions(body, dateStamp);
     for (var s : subs)  {
         print("Subst from byte " + s.startByte + " to " + s.endByte);
@@ -244,7 +289,8 @@ String parseHead(String old, Dir targetDir, /* out */ L<String> globalCoreScript
         if (scrName.startsWith("../")) {
             globalCoreScripts.add(shaveOffExtension(scrName.substring(3))); // 3 for the `../`
         } else if (scrName.equals("local.js")) {
-            L<String> existingLocals = fs.getNamesWithPrefix(targetDir, "local");
+            var existingFiles = fs.listFiles(targetDir);
+            L<String> existingLocals = getNamesWithPrefix(new UnvName("local.js"), existingFiles);
             localScriptName = getNameWithMaxVersion(existingLocals).f1;
         } else {
             throw new
@@ -305,7 +351,7 @@ static String parseCreatedDate(String old) {
 void createNewDocs(Ingestion ing) {
     for (CreateUpdate cre : ing.createDocs) {
         Dir targetDir = new Dir(blogDir, cre.targetDir);
-        String freshContent = buildDocument(targetDir, "", todayDt, cre.newContent);
+        String freshContent = buildDocument(cre, "", todayDt);
         fs.saveOverwriteFile(new Dir(blogDir, cre.targetDir), "i.html", freshContent);
     }
 }
@@ -315,7 +361,7 @@ void updateDocs(Ingestion ing) {
     for (CreateUpdate upd : ing.updateDocs) {
         Dir targetDir = new Dir(blogDir, upd.targetDir);
         String oldContent = fs.readTextFile(targetDir, "i.html");
-        String updatedContent = buildDocument(targetDir, oldContent, todayDt, upd.newContent);
+        String updatedContent = buildDocument(upd, oldContent, todayDt);
         fs.saveOverwriteFile(new Dir(blogDir, upd.targetDir), "i.html", updatedContent);
     }
 }
@@ -334,6 +380,21 @@ static Subfolder convertToTargetDir(Subfolder ingestDir) {
     return new Subfolder(Paths.get(dirParts).toString());
 }
 
+
+static int getFileVersion(String fn) {
+    /// `file-123.txt` => 123
+    String withoutExt = shaveOffExtension(fn);
+    int indDash = withoutExt.lastIndexOf("-");
+    if (indDash < 0) {
+        return 1;
+    }
+    var mbNumber = parseInt(withoutExt.substring(indDash + 1));
+    if (mbNumber.isPresent()) {
+        return mbNumber.get();
+    } else {
+        return 1;
+    }
+}
 
 static Tu<String, Integer> getNameWithMaxVersion(L<String> filenames) {
     /// For a list like `file.txt, file-2.txt, file-3.txt`, returns 3.
@@ -359,43 +420,42 @@ static Tu<String, Integer> getNameWithMaxVersion(L<String> filenames) {
 }
 
 
-static String makeNameBumpedVersion(String unversionedName, L<String> existingNames) {
+static String makeNameBumpedVersion(UnvName unversionedName, L<FileInfo> existingFiles) {
     /// `file.js` (`file-2.js` `file-3.js`) => `file-4.js`
-    if (existingNames.size() == 0) {
-        return unversionedName;
+    if (existingFiles.size() == 0) {
+        return unversionedName.cont;
     } else {
-        int maxExistingVersion = getNameWithMaxVersion(existingNames).f2;
+        int maxExistingVersion = getNameWithMaxVersion(existingFiles.trans(x -> x.name)).f2;
         int newVersion = (maxExistingVersion == 0) ? 2 : maxExistingVersion + 1;
-        int indLastDot = unversionedName.lastIndexOf(".");
-        return unversionedName.substring(0, indLastDot) + "-" + newVersion
-                + unversionedName.substring(indLastDot);
+        int indLastDot = unversionedName.cont.lastIndexOf(".");
+        return unversionedName.cont.substring(0, indLastDot) + "-" + newVersion
+                + unversionedName.cont.substring(indLastDot);
     }
 }
+
 
 //}}}
 //{{{ Ingestion
 
 static class Ingestion {
-    L<CreateUpdate> createDocs;
-    L<CreateUpdate> updateDocs;
-    L<Subfolder> deleteDocs; // list of dirs like `a/b/c`
-    L<Doc> allDocs;
+    L<CreateUpdate> createDocs = new L();
+    L<CreateUpdate> updateDocs = new L();
+    L<Subfolder> deleteDocs = new L(); // list of dirs like `a/b/c`
+    L<Doc> allDocs = new L();
     NavTree nav;
 
-    public Ingestion(L<CreateUpdate> createDirs, L<CreateUpdate> updateDirs,
-            L<Subfolder> deleteDirs, L<Doc> allDirs) {
-        print("Ingestion constructor, count of create " + createDirs.size()
-                + ", updateDocs count = " + updateDirs.size() + ", deleteDocs count = "
-                + deleteDirs.size() + ", allDirs = " + allDirs.size());
-        this.createDocs = createDirs;
-        this.updateDocs = updateDirs;
-        this.deleteDocs = deleteDirs;
-        this.allDocs = allDirs;
-        this.nav = buildThematic(allDirs);
+    public void printOut() {
+        print("Ingestion constructor, count of create " + createDocs.size()
+                + ", updateDocs count = " + updateDocs.size() + ", deleteDocs count = "
+                + deleteDocs.size() + ", allDirs = " + allDocs.size());
     }
 
-    NavTree buildThematic(L<Doc> allDirs) {
-        Collections.sort(allDirs, (x, y) ->{
+    public void finalize() {
+        this.nav = buildThematic();
+    }
+
+    private NavTree buildThematic() {
+        Collections.sort(allDocs, (x, y) ->{
             int folderLengthCommon = Math.min(x.spl.size(), y.spl.size());
             for (int i = 0; i < folderLengthCommon; i++) {
                 int cmp = x.spl.get(i).compareTo(y.spl.get(i));
@@ -409,7 +469,7 @@ static class Ingestion {
                 return x.spl.last().compareTo(y.spl.last());
             }
         });
-        var docsByName = allDirs;
+        var docsByName = allDocs;
 
         var st = new L<NavTree>();
         var root = new NavTree("", new L<NavTree>());
@@ -439,26 +499,31 @@ static class Ingestion {
     }
 }
 
+
+static class LocalFiles {
+    Map<UnvName, String> versions = new HashMap();
+    L<String> filesToDelete = new L();
+}
+
 static class CreateUpdate {
     Subfolder sourceDir; // source dir like `a.b.c`
     Subfolder targetDir; // target dir like `a/b/c`
     String newContent; // content of the new "i.html" file, if it's present
-    Map<String, String> localVersions; // map from prefix to full filename for local files
+    LocalFiles localFiles; // map from prefix to full filename for local files
 
-    public CreateUpdate(Subfolder sourceDir, Subfolder targetDir)  {
+    public CreateUpdate(Subfolder sourceDir, Subfolder targetDir, LocalFiles localFiles)  {
         this.sourceDir = sourceDir;
         this.targetDir = targetDir;
-
         this.newContent = "";
-
-        localVersions = new HashMap();
+        localFiles = localFiles;
     }
 
-    public CreateUpdate(Subfolder sourceDir, Subfolder targetDir, String newContent)  {
+    public CreateUpdate(Subfolder sourceDir, Subfolder targetDir, LocalFiles localFiles,
+                        String newContent)  {
         this.sourceDir = sourceDir;
         this.targetDir = targetDir;
         this.newContent = newContent;
-        localVersions = new HashMap();
+        this.localFiles = localFiles;
     }
 }
 
@@ -552,45 +617,7 @@ record Substitution(int startByte, int endByte, String text) {}
 
 
 //}}}
-//{{{ Filesys
 
-static class FileInfo {
-    String name;
-    Instant modified;
-
-    public FileInfo(String name, Instant modif)  {
-        this.name = name;
-        this.modified = modif;
-    }
-}
-
-interface FileSys {
-    boolean dirExists(Dir dir);
-    L<FileInfo> listFiles(Dir dir); // immediate files in a dir
-    L<Subfolder> listSubfolders(Dir dir); // immediate subfolders of child dirs
-    L<Subfolder> listSubfoldersContaining(Dir dir, String fN); // recursively list all nested dirs
-    L<String> getNamesWithPrefix(Dir dir, String prefix);
-    String readTextFile(Dir dir, String fN);
-    boolean createDir(Dir dir);
-    boolean saveOverwriteFile(Dir dir, String fN, String cont);
-    boolean moveFile(Dir dir, String fN, Dir targetDir);
-    String moveFileToNewVersion(Dir dir, String fN, Dir targetDir);
-    boolean deleteIfExists(Dir dir, String fN);
-    boolean deleteDirIfExists(Dir dir);
-}
-
-
-// Implementation
-//~    try (Stream<Path> walk = Files.walk(Paths.get(blogDir))) {
-//~        walk.filter(Files::isDirectory)
-//~            .forEach(x -> {
-//~                oldDirs.add(x.toString());
-//~            });
-//~    } catch (Exception e) {
-//~        System.out.println(e.getMessage());
-//~    }
-
-//}}}
 //{{{ Templates
 
 static final String template0 = """

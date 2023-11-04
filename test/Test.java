@@ -72,15 +72,6 @@ static class MockFileSys implements FileSys {
     }
 
     @Override
-    public L<String> getNamesWithPrefix(Dir dir, String prefix) {
-        if (!fs.containsKey(dir.cont)) {
-            return new L();
-        }
-        var existingFiles = fs.get(dir.cont);
-        return existingFiles.transIf(x -> x.name.startsWith(prefix), y -> y.name);
-    }
-
-    @Override
     public String readTextFile(Dir dir, String fN) {
         if (!fs.containsKey(dir.cont)) {
             return "";
@@ -133,24 +124,20 @@ static class MockFileSys implements FileSys {
     }
 
     @Override
-    public String moveFileToNewVersion(Dir dir, String fN, Dir targetDir) {
+    public boolean moveFileWithRename(Dir dir, String fN, Dir targetDir, String newName) {
         var sourceFiles = fs.get(dir.cont);
         int indexSource = sourceFiles.findIndex(x -> x.name.equals(fN));
         MockFile sourceFile = sourceFiles.get(indexSource);
+        L<MockFile> targetFiles = fs.get(targetDir.cont);
 
-        createDir(targetDir);
-        var targetFiles = fs.get(targetDir.cont);
-
-        var existingWithThisPrefix = getNamesWithPrefix(targetDir, shaveOffExtension(fN));
-        String newName = fN;
-        if (existingWithThisPrefix.size() == 0) {
+        var existingInd = targetFiles.indexOf(newName);
+        if (existingInd < 0) {
             targetFiles.add(sourceFile);
         } else {
-            newName = makeNameBumpedVersion(fN, existingWithThisPrefix);
-            targetFiles.add(new MockFile(newName, sourceFile.cont, sourceFile.modified));
+            targetFiles.set(existingInd, sourceFile);
         }
         sourceFiles.remove(indexSource);
-        return newName;
+        return true;
     }
 
     @Override
@@ -311,7 +298,7 @@ static void testFilePrefixes() {
     fs.saveOverwriteFile(target, "myFile.txt", "An ode to joy");
     fs.saveOverwriteFile(target, "myFile-2.txt", "An ode to joy 2");
     fs.saveOverwriteFile(target, "myFile-3.txt", "An ode to joy 3");
-    var versions = fs.getNamesWithPrefix(target, "myFile");
+    var versions = getNamesWithPrefix(new UnvName("myFile"), fs.listFiles(target));
     assertArrsEqual(versions, L.of("myFile.txt", "myFile-2.txt", "myFile-3.txt"));
 }
 
@@ -389,6 +376,19 @@ static void createSimpleDocForTest(FileSys fs, Dir docDir) {
     fs.saveOverwriteFile(docDir, "i.html", inputContent);
 }
 
+static void makeNameBumpedVersion() {
+    var result = Blog.makeNameBumpedVersion(new UnvName("local.js"),
+            L.of(new FileInfo("asdf.png", Instant.now()),
+                 new FileInfo("local.js", Instant.now()),
+                 new FileInfo("local-2.js", Instant.now()),
+                 new FileInfo("local-3.js", Instant.now())));
+    blAssert(result.equals("local-4.js"));
+}
+
+static void unvName() {
+    var result = new UnvName("asdf-2.jpg");
+    blAssert(result.cont.equals("asdf.jpg"));
+}
 
 static void createNewDoc() {
     /// With core files in place, create a simple first doc
@@ -478,8 +478,11 @@ public static void main(String[] args) {
 //~    runTest(Test::updateCore, counters);
 //~    runTest(Test::parseDateStamp, counters);
 
+    runTest(Test::makeNameBumpedVersion, counters);
+    runTest(Test::unvName, counters);
+
 //~    runTest(Test::createNewDoc, counters);
-    runTest(Test::updateDoc, counters);
+//~    runTest(Test::updateDoc, counters);
 
     if (counters.countFailed > 0)  {
         System.out.println("Failed " + counters.countFailed + " tests");
