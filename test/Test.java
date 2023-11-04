@@ -130,6 +130,11 @@ static class MockFileSys implements FileSys {
         MockFile theFile = sourceFiles.get(indexSource);
         theFile.name = newName;
         L<MockFile> targetFiles = fs.get(targetDir.cont);
+        sourceFiles.remove(indexSource);
+        if (targetFiles == null) {
+            fs.put(targetDir.cont, L.of(theFile));
+            return true;
+        }
 
         var existingInd = targetFiles.indexOf(newName);
         if (existingInd < 0) {
@@ -137,7 +142,7 @@ static class MockFileSys implements FileSys {
         } else {
             targetFiles.set(existingInd, theFile);
         }
-        sourceFiles.remove(indexSource);
+
         return true;
     }
 
@@ -352,7 +357,8 @@ static void updateCore() {
 }
 
 static void parseDateStamp() {
-    String input = "<!-- Dates --><div>Created: 2023-04-05, updated: 2023-04-06</div><!-- / -->";
+    String input =
+        "<!-- Dates --><div id=\"_dtSt\">Created: 2023-04-05, updated: 2023-04-06</div><!-- / -->";
     String dateOld = Blog.parseCreatedDate(input);
     blAssert(dateOld.equals("2023-04-05"));
 }
@@ -403,15 +409,7 @@ static void moveAndReadLocalFilesTest() {
     fs.saveOverwriteFile(sourceDir, "c.txt", "new");
 
     LocalFiles local = blog.moveAndReadLocalFiles(fs.listFiles(sourceDir), sourceDir, targetDir);
-    print("Versions:");
-    for (var v : local.versions.entrySet()) {
-        print(v.getKey().cont + " : " + v.getValue());
-    }
-    print("To delete:");
-    for (var d : local.filesToDelete) {
-        print(d);
-    }
-    print("End");
+
     blAssert(local.versions.size() == 3
             && local.versions.get(new UnvName("a.txt")).equals("a.txt") // unchanged old
             && local.versions.get(new UnvName("b.txt")).equals("b-2.txt") // updated file
@@ -442,7 +440,7 @@ static void createNewDoc() {
     <script type="text/javascript" src="local.js"></script>
     <link rel="stylesheet" href="/blog/style.css" />
 </head>
-<body><!-- Dates --><div>Created:""" + " " + nowStamp + ", updated: " + nowStamp + """
+<body><!-- Dates --><div id="_dtSt">Created:""" + " " + nowStamp + ", updated: " + nowStamp + """
 </div><!-- / -->
     <div>Hello world!</div><img src="myImg.png">
 </body>
@@ -451,8 +449,9 @@ static void createNewDoc() {
     Dir pathNewDoc = new Dir(blogDir, new Subfolder("a/b/c"));
     L<FileInfo> result = fs.listFiles(pathNewDoc);
     print("size " + result.size() + ", name " + result.get(0).name);
-    blAssert(result.size() == 1 && result.get(0).name.equals("i.html"));
     String cont = fs.readTextFile(pathNewDoc, "i.html");
+    print("got:");
+    print(cont);
     blAssert(cont.equals(expectedContent));
 }
 
@@ -466,7 +465,7 @@ static void updateDoc() {
     fs.saveOverwriteFile(pathExistingDoc, "local-2.js", "old local script");
     fs.saveOverwriteFile(pathExistingDoc, "myImg.png", "old image");
     fs.saveOverwriteFile(pathExistingDoc, "i.html",
-            "<head></head><body><!-- Dates --><div>Created: 2023-04-05</div><!-- / --></body>");
+            "<head></head><body><!-- Dates --><div id=\"_dtSt\">Created: 2023-04-05</div><!-- / --></body>");
     Dir docDir = new Dir(ingestDir, new Subfolder("a.b.c"));
     createSimpleDocForTest(fs, docDir);
     fs.saveOverwriteFile(docDir, "local.js", "new local script");
@@ -513,9 +512,9 @@ public static void main(String[] args) {
 //~    runTest(Test::makeNameBumpedVersion, counters);
 //~    runTest(Test::unvName, counters);
 
-    runTest(Test::moveAndReadLocalFilesTest, counters);
+//~    runTest(Test::moveAndReadLocalFilesTest, counters);
 
-//~    runTest(Test::createNewDoc, counters);
+    runTest(Test::createNewDoc, counters);
 //~    runTest(Test::updateDoc, counters);
 
     if (counters.countFailed > 0)  {

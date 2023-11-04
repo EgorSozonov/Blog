@@ -55,7 +55,7 @@ String todayDt = "";
 
 static final String stampOpen = "<!-- Dates -->";
 static final String stampClose = "<!-- / -->";
-static final String stampTemplate = "<div>Created: $created, updated: $updated</div>";
+static final String stampTemplate = "<div id=\"_dtSt\">Created: $created, updated: $updated</div>";
 
 public Blog(FileSys fs)  {
     this.fs = fs;
@@ -135,6 +135,7 @@ Ingestion buildIngestion() {
         int mbIndex = inFiles.findIndex(x -> x.name.equals("i.html"));
         if (mbIndex > -1) {
             newContent = fs.readTextFile(inSourceDir, "i.html");
+
             if (newContent.length() <= 1) {
                 // a 0- or 1-byte long i.html means "delete this document"
                 ing.deleteDocs.add(inTargetSubf);
@@ -152,7 +153,6 @@ Ingestion buildIngestion() {
             }
             ing.allDocs.add(new Doc(inTargetSubf));
         } else if (mbIndex > -1) {
-            newContent = fs.readTextFile(inSourceDir, "i.html");
             ing.createDocs.add(
                     new CreateUpdate(inSourceSubf, inTargetSubf, localFiles, newContent));
             ing.allDocs.add(new Doc(inTargetSubf));
@@ -164,7 +164,7 @@ Ingestion buildIngestion() {
 
 LocalFiles moveAndReadLocalFiles(L<FileInfo> inFiles, Dir inSourceDir, Dir inTargetDir) {
     /// Determines the new filenames for all local files of a document (the script if any,
-    /// and the media files)
+    /// and the media files) except of course the `i.html`
     LocalFiles result = new LocalFiles();
     Map<UnvName, Tu<Integer, L<String>>> versions = new HashMap();
     // fn -> (maxEncounteredVersion deleteList)
@@ -176,7 +176,7 @@ LocalFiles moveAndReadLocalFiles(L<FileInfo> inFiles, Dir inSourceDir, Dir inTar
         fs.moveFileWithRename(inSourceDir, fInfo.name, inTargetDir, newVersion);
         //result.versions.put(fn, newVersion);
     }
-    existingFiles = fs.listFiles(inTargetDir);
+    existingFiles = fs.listFiles(inTargetDir).filter(x -> !x.name.equals("i.html"));
     for (var f : existingFiles) {
         UnvName unvName = new UnvName(f.name);
         int version = getFileVersion(f.name);
@@ -205,7 +205,14 @@ String buildDocument(CreateUpdate createUpdate, String old, String updatedDt) {
     if (old == "" && createUpdate.newContent == "") {
         throw new RuntimeException("Can't build a document with no inputs!");
     }
-    String mainSource = (createUpdate.newContent != "") ? createUpdate.newContent : old;
+    String mainSource;
+    boolean isOld;
+    if (createUpdate.newContent != "") {
+        mainSource = createUpdate.newContent;
+    } else {
+        mainSource = old;
+        isOld = true;
+    }
     String createdDt = "";
     if (old == "") {
         createdDt = updatedDt;
@@ -220,18 +227,18 @@ String buildDocument(CreateUpdate createUpdate, String old, String updatedDt) {
     if (indBody < 0) {
         throw new RuntimeException("Body not found in the HTML document");
     }
-    String body = mainSource.substring(indBody);
+    String content = extractContent(mainSource, isOld);
 
     String localScriptName =
             parseHead(mainSource, new Dir(blogDir, createUpdate.targetDir), globalScripts);
-    L<Substitution> subs = parseBodySubstitutions(body, dateStamp);
+    L<Substitution> subs = parseBodySubstitutions(content, dateStamp);
     for (var s : subs)  {
         print("Subst from byte " + s.startByte + " to " + s.endByte);
     }
 
     var result = new StringBuilder();
     buildHead(localScriptName, globalScripts, result);
-    buildBody(body, subs, result);
+    buildBody(content, subs, result);
     return result.toString();
 }
 
@@ -254,15 +261,37 @@ void buildHead(String localScriptName, L<String> globalScripts, StringBuilder re
 }
 
 
-static void buildBody(String body, L<Substitution> subs, StringBuilder result) {
-    print("body " + body);
-    int curr = 6; // 6 for the `<body>`
+static String extractContent(String html, boolean isOld) {
+    /// For an old file, it extracts the contents of the `<div id="_content">` tag
+    /// For a new file, it extracts the contents of the `<body>` tag
+    if (isOld) {
+        String opener = "<div id=\"_content\">";
+        int indStart = html.indexOf(opener) + opener.length();
+        int indEnd = html.indexOf("<div id=\"_content\">");
+    } else {
+        int indStart = html.indexOf("<body>") + 6;
+        int indEnd = html.indexOf("</body>");
+    }
+    return html.substring(indStart, indEnd);
+}
+
+
+static void buildBody(String content, L<Substitution> subs, StringBuilder result) {
+    int curr = 0;
+    result.append(templateBodyStart);
+    buildContent(content, subs, result);
+
+    result.append(body.substring(curr, content.length()));
+    result.append(templateEnd);
+}
+
+
+static void buildContent(String content, L<Substitution> subs, StringBuilder result) {
     for (var sub : subs) {
         result.append(body.substring(curr, sub.startByte));
         result.append(sub.text);
         curr = sub.endByte;
     }
-    result.append(body.substring(curr, body.length()));
 }
 
 
@@ -304,7 +333,7 @@ String parseHead(String old, Dir targetDir, /* out */ L<String> globalCoreScript
 static L<Substitution> parseBodySubstitutions(String body, String dateStamp) {
     /// Produces a list of substitutions sorted by start byte.
     L<Substitution> result = new L();
-    int start = 6; // 6 for the length of `<body>`
+    int start = 6; // 6 to skip the `<body>`
 
     // the date stamp
     int indStampOpen = body.indexOf(stampOpen);
@@ -353,6 +382,11 @@ void createNewDocs(Ingestion ing) {
         Dir targetDir = new Dir(blogDir, cre.targetDir);
         String freshContent = buildDocument(cre, "", todayDt);
         fs.saveOverwriteFile(new Dir(blogDir, cre.targetDir), "i.html", freshContent);
+
+        for (var localToDelete : upd.localFiles.filesToDelete) {
+            fs.deleteIfExists(new Dir(blogDir, upd.targetDir), localToDelete);
+        }
+        fs.deleteDirIfExists(new Dir(ingestDir, upd.sourceDir));
     }
 }
 
@@ -363,6 +397,11 @@ void updateDocs(Ingestion ing) {
         String oldContent = fs.readTextFile(targetDir, "i.html");
         String updatedContent = buildDocument(upd, oldContent, todayDt);
         fs.saveOverwriteFile(new Dir(blogDir, upd.targetDir), "i.html", updatedContent);
+
+        for (var localToDelete : upd.localFiles.filesToDelete) {
+            fs.deleteIfExists(new Dir(blogDir, upd.targetDir), localToDelete);
+        }
+        fs.deleteDirIfExists(new Dir(ingestDir, upd.sourceDir));
     }
 }
 
@@ -642,58 +681,60 @@ static final String template0 = """
 """;
 
 
-static final String templateHeadCloseBodyStart = """
+static final String templateBodyStart = """
 <body>
-    <div class="__wrapper">
-        <div class="__navbar" id="_theNavBar">
-            <div class="__menuTop">
-                <div class="__svgButton" title="Temporal sorting">
-                    <a id="_reorderTemporal" title="Temporal sorting">
-                        <svg id="_sorterTemp" class="__swell" width="30" height="30"
-                            viewBox="0 0 100 100">
-                            <circle r="48" cx="50" cy="50" />
-                            <path d="M 35 20 h 30 c 0 30 -30 30 -30 60 h 30
-                                     c 0 -30 -30 -30 -30 -60" />
-                        </svg>
-                    </a>
-                </div>
-                <div class="__svgButton">
-                    <a href="http://sozonov.site" title="Home page">
-                        <svg id="__homeIcon" class="__swell" width="30" height="30"
-                         viewBox="0 0 100 100">
-                            <circle r="48" cx="50" cy="50" />
-                            <path d="M 30 45 h 40 v 25 h -40 v -25 " />
-                            <path d="M 22 50 l 28 -25 l 28 25" />
-                        </svg>
-                    </a>
-                </div>
-            </div>
-            <div class="__menu" id="__theMenu"></div>
+<div class="_wrapper">
+<div class="_navbar" id="_theNavBar">
+    <div class="_menuTop">
+        <div class="_svgButton" title="Temporal sorting">
+            <a id="_reorderTemporal" title="Temporal sorting">
+                <svg id="_sorterTemp" class="_swell" width="30" height="30"
+                    viewBox="0 0 100 100">
+                    <circle r="48" cx="50" cy="50" />
+                    <path d="M 35 20 h 30 c 0 30 -30 30 -30 60 h 30
+                             c 0 -30 -30 -30 -30 -60" />
+                </svg>
+            </a>
         </div>
-
-        <div class="__divider" id="_divider">&lt;</div>
-        <div class="__menuToggler __hidden" id="_menuToggler">
-            <div class="__svgButton" title="Open menu">
-                    <a id="_toggleNavBar">
-                        <svg class="__swell" width="30" height="30" viewBox="0 0 100 100">
-                            <circle r="48" cx="50" cy="50"></circle>
-                            <path d="M 30 35 h 40" stroke-width="6"></path>
-                            <path d="M 30 50 h 40" stroke-width="6"></path>
-                            <path d="M 30 65 h 40" stroke-width="6"></path>
-                        </svg>
-                    </a>
-            </div>
+        <div class="_svgButton">
+            <a href="http://sozonov.site" title="Home page">
+                <svg id="_homeIcon" class="_swell" width="30" height="30"
+                 viewBox="0 0 100 100">
+                    <circle r="48" cx="50" cy="50" />
+                    <path d="M 30 45 h 40 v 25 h -40 v -25 " />
+                    <path d="M 22 50 l 28 -25 l 28 25" />
+                </svg>
+            </a>
         </div>
+    </div>
+    <div class="_menu" id="_theMenu"></div>
+</div>
 
+<div class="_divider" id="_divider">&lt;</div>
+<div class="_menuToggler _hidden" id="_menuToggler">
+    <div class="_svgButton" title="Open menu">
+            <a id="_toggleNavBar">
+                <svg class="_swell" width="30" height="30" viewBox="0 0 100 100">
+                    <circle r="48" cx="50" cy="50"></circle>
+                    <path d="M 30 35 h 40" stroke-width="6"></path>
+                    <path d="M 30 50 h 40" stroke-width="6"></path>
+                    <path d="M 30 65 h 40" stroke-width="6"></path>
+                </svg>
+            </a>
+    </div>
+</div>
 
-        <div class="__content">
+<div class="_content">
 """;
 
 
 
-static final String template4 = """
-        </div>
+static final String templateEnd = """
+    <div class="_footer">© Egor Sozonov | <a href="https://sozonov.site">Home</a> |
+        <a href="/blog/TermsOfUse">Terms of use</a>
     </div>
+</div>
+</div>
 </body>
 </html>
 """;

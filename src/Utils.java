@@ -325,6 +325,18 @@ static final class L<T> implements List<T> {
         return result;
     }
 
+    public L<T> filter(Predicate<T> pred) {
+        L<T> result = new L();
+        int j = 0;
+        for (int i = 0; i < size; i++) {
+            T elt = data[i];
+            if (pred.test(elt)) {
+                result.add(elt);
+                j++;
+            }
+        }
+        return result;
+    }
 
     public Optional<T> first(Predicate<T> pred) {
         /// Find index of first element satisfying predicate.
