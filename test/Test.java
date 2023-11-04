@@ -127,14 +127,15 @@ static class MockFileSys implements FileSys {
     public boolean moveFileWithRename(Dir dir, String fN, Dir targetDir, String newName) {
         var sourceFiles = fs.get(dir.cont);
         int indexSource = sourceFiles.findIndex(x -> x.name.equals(fN));
-        MockFile sourceFile = sourceFiles.get(indexSource);
+        MockFile theFile = sourceFiles.get(indexSource);
+        theFile.name = newName;
         L<MockFile> targetFiles = fs.get(targetDir.cont);
 
         var existingInd = targetFiles.indexOf(newName);
         if (existingInd < 0) {
-            targetFiles.add(sourceFile);
+            targetFiles.add(theFile);
         } else {
-            targetFiles.set(existingInd, sourceFile);
+            targetFiles.set(existingInd, theFile);
         }
         sourceFiles.remove(indexSource);
         return true;
@@ -390,6 +391,37 @@ static void unvName() {
     blAssert(result.cont.equals("asdf.jpg"));
 }
 
+
+static void moveAndReadLocalFilesTest() {
+    var fs = new MockFileSys();
+    Blog blog = new Blog(fs);
+    Dir sourceDir = new Dir(ingestDir, new Subfolder("a.b"));
+    Dir targetDir = new Dir(blogDir, new Subfolder("a/b"));
+    fs.saveOverwriteFile(targetDir, "a.txt", "old");
+    fs.saveOverwriteFile(targetDir, "b.txt", "old");
+    fs.saveOverwriteFile(sourceDir, "b.txt", "new");
+    fs.saveOverwriteFile(sourceDir, "c.txt", "new");
+
+    LocalFiles local = blog.moveAndReadLocalFiles(fs.listFiles(sourceDir), sourceDir, targetDir);
+    print("Versions:");
+    for (var v : local.versions.entrySet()) {
+        print(v.getKey().cont + " : " + v.getValue());
+    }
+    print("To delete:");
+    for (var d : local.filesToDelete) {
+        print(d);
+    }
+    print("End");
+    blAssert(local.versions.size() == 3
+            && local.versions.get(new UnvName("a.txt")).equals("a.txt") // unchanged old
+            && local.versions.get(new UnvName("b.txt")).equals("b-2.txt") // updated file
+            && local.versions.get(new UnvName("c.txt")).equals("c.txt") // new file
+    );
+    blAssert(local.filesToDelete.size() == 1
+            && local.filesToDelete.get(0).equals("b.txt"));
+}
+
+
 static void createNewDoc() {
     /// With core files in place, create a simple first doc
     var fs = new MockFileSys();
@@ -478,8 +510,10 @@ public static void main(String[] args) {
 //~    runTest(Test::updateCore, counters);
 //~    runTest(Test::parseDateStamp, counters);
 
-    runTest(Test::makeNameBumpedVersion, counters);
-    runTest(Test::unvName, counters);
+//~    runTest(Test::makeNameBumpedVersion, counters);
+//~    runTest(Test::unvName, counters);
+
+    runTest(Test::moveAndReadLocalFilesTest, counters);
 
 //~    runTest(Test::createNewDoc, counters);
 //~    runTest(Test::updateDoc, counters);

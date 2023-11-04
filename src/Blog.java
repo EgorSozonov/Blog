@@ -398,9 +398,12 @@ static int getFileVersion(String fn) {
 
 static Tu<String, Integer> getNameWithMaxVersion(L<String> filenames) {
     /// For a list like `file.txt, file-2.txt, file-3.txt`, returns 3.
+    if (filenames.size() == 0) {
+        return new Tu("", 0);
+    }
     L<String> withoutExts = filenames.trans(Utils::shaveOffExtension);
     var versions = new L();
-    int maxVersion = 0;
+    int maxVersion = 1;
     String result = filenames.get(0);
     for (int i = 0; i < filenames.size(); i++) {
         String shortName = withoutExts.get(i);
@@ -425,8 +428,18 @@ static String makeNameBumpedVersion(UnvName unversionedName, L<FileInfo> existin
     if (existingFiles.size() == 0) {
         return unversionedName.cont;
     } else {
-        int maxExistingVersion = getNameWithMaxVersion(existingFiles.trans(x -> x.name)).f2;
-        int newVersion = (maxExistingVersion == 0) ? 2 : maxExistingVersion + 1;
+        var versionsOfSameFile = existingFiles.transIf(
+                x -> new UnvName(x.name).equals(unversionedName),
+                x -> x.name);
+
+        int maxExistingVersion =
+                getNameWithMaxVersion(existingFiles.transIf(
+                        x -> new UnvName(x.name).equals(unversionedName),
+                        x -> x.name)).f2;
+        if (maxExistingVersion == 0) {
+            return unversionedName.cont;
+        }
+        int newVersion = maxExistingVersion + 1;
         int indLastDot = unversionedName.cont.lastIndexOf(".");
         return unversionedName.cont.substring(0, indLastDot) + "-" + newVersion
                 + unversionedName.cont.substring(indLastDot);
