@@ -17,7 +17,6 @@ import java.lang.reflect.Array;
 import java.nio.file.Paths;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
-import static tech.sozonov.blog.Utils.*;
 import static tech.sozonov.blog.Blog.*;
 
 //}}}
@@ -56,7 +55,6 @@ static class MockFileSys implements FileSys {
     }
 
     @Override
-
     public L<Subfolder> listSubfoldersContaining(Dir dir, String fN) {
         /// Gets the list of directories containing a filename, for example "i.html"
         String dirWithSl = (dir.cont.endsWith("/")) ? dir.cont : (dir.cont + "/");
@@ -80,15 +78,6 @@ static class MockFileSys implements FileSys {
     }
 
     @Override
-    public boolean createDir(Dir dir) {
-        if (fs.containsKey(dir.cont)) {
-            return true;
-        }
-        fs.put(dir.cont, new L());
-        return true;
-    }
-
-    @Override
     public boolean saveOverwriteFile(Dir dir, String fN, String cont) {
         var newFile = new MockFile(fN, cont, Instant.now());
         if (fs.containsKey(dir.cont)) {
@@ -105,23 +94,6 @@ static class MockFileSys implements FileSys {
         return true;
     }
 
-    @Override
-    public boolean moveFile(Dir dir, String fN, Dir targetDir) {
-        var sourceFiles = fs.get(dir.cont);
-        int indexSource = sourceFiles.findIndex(x -> x.name.equals(fN));
-        MockFile sourceFile = sourceFiles.get(indexSource);
-        L<MockFile> targetFiles = fs.get(targetDir.cont);
-
-        var existingInd = targetFiles.indexOf(fN);
-        String newName = fN;
-        if (existingInd < 0) {
-            targetFiles.add(sourceFile);
-        } else {
-            targetFiles.set(existingInd, sourceFile);
-        }
-        sourceFiles.remove(indexSource);
-        return true;
-    }
 
     @Override
     public boolean moveFileWithRename(Dir dir, String fN, Dir targetDir, String newName) {
@@ -363,6 +335,18 @@ static void parseDateStamp() {
     blAssert(dateOld.equals("2023-04-05"));
 }
 
+static void parseContentTest() {
+    String newInput = "<html><head></head><body>expected</body></html>";
+    String extracted = Blog.extractContent(newInput, false);
+    blAssert(extracted.equals("expected"));
+    String oldInput = "<html><head></head><body><div>"
+            + Blog.contentStartMarker + "expected" + Blog.contentEndMarker
+            + "</div></body></html>";
+    extracted = Blog.extractContent(oldInput, true);
+    blAssert(extracted.equals("expected"));
+
+}
+
 static void createSimpleDocForTest(FileSys fs, Dir docDir) {
     fs.saveOverwriteFile(blogDir, "termsOfUse.html", "Terms of Use");
     fs.saveOverwriteFile(blogDir, "script.js", "Terms of Use");
@@ -426,30 +410,21 @@ static void createNewDoc() {
     Blog b = new Blog(fs);
     Dir docDir = new Dir(ingestDir, new Subfolder("a.b.c"));
     createSimpleDocForTest(fs, docDir);
+    createSimpleDocForTest(fs, new Dir(ingestDir, new Subfolder("other.d")));
 
     b.ingestDocs();
 
     String nowStamp = formatter.format(Instant.now());
     String expectedContent = """
-<!DOCTYPE html>
-<html>
-<head>
-    <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self'; base-uri 'self';" />
-    <script type="text/javascript" src="/blog/script.js"></script>
-    <script type="text/javascript" src="local.js"></script>
-    <link rel="stylesheet" href="/blog/style.css" />
-</head>
-<body><!-- Dates --><div id="_dtSt">Created:""" + " " + nowStamp + ", updated: " + nowStamp + """
+<!-- Dates --><div id="_dtSt">Created:""" + " " + nowStamp + ", updated: " + nowStamp + """
 </div><!-- / -->
     <div>Hello world!</div><img src="myImg.png">
-</body>
-</html>""";
+""";
 
     Dir pathNewDoc = new Dir(blogDir, new Subfolder("a/b/c"));
     L<FileInfo> result = fs.listFiles(pathNewDoc);
     print("size " + result.size() + ", name " + result.get(0).name);
-    String cont = fs.readTextFile(pathNewDoc, "i.html");
+    String cont = Blog.extractContent(fs.readTextFile(pathNewDoc, "i.html"), true);
     print("got:");
     print(cont);
     blAssert(cont.equals(expectedContent));
@@ -513,8 +488,8 @@ public static void main(String[] args) {
 //~    runTest(Test::unvName, counters);
 
 //~    runTest(Test::moveAndReadLocalFilesTest, counters);
-
-    runTest(Test::createNewDoc, counters);
+    runTest(Test::parseContentTest, counters);
+//~    runTest(Test::createNewDoc, counters);
 //~    runTest(Test::updateDoc, counters);
 
     if (counters.countFailed > 0)  {

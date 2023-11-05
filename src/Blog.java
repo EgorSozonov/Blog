@@ -22,8 +22,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
-import static tech.sozonov.blog.Utils.*;
-import tech.sozonov.blog.Utils.Tu;
+//import static tech.sozonov.blog.Utils.*;
+//import tech.sozonov.blog.Utils.Tu;
 
 //}}}
 
@@ -36,13 +36,16 @@ static final Dir blogDir = new Dir(webRoot, new Subfolder("blog"));
 static final Dir ingestDir = new Dir(webRoot, new Subfolder("blogIngest"));
 
 static final String appSuburl = "blog/"; // The URL prefix
-static final int updateFreq = 300; // seconds before the cache gets rescanned
+static final String contentStartMarker = "<div id=\"_content\">\n";
+static final String contentEndMarker = "<!-- _contentEnd -->";
+
 // All fixed core files must be unique even without the file extension
 static final String[] fixedCoreFiles =
             { "notFound.html", "img404.png", "style.css", "blog.html", "script.js",
               "favicon.ico", "footer.html", "no.png", "yes.png", "termsOfUse.html"};
 
-static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.systemDefault());
+static final DateTimeFormatter formatter =
+        DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.systemDefault());
 
 //}}}
 //{{{ Blog
@@ -65,12 +68,13 @@ public Blog(FileSys fs)  {
 }
 
 void ingestCore() {
+    /// Ingest the core files
     if (!fs.dirExists(ingestDir))  {
         return;
     }
-    var files = fs.listFiles(ingestDir);
+    var inFiles = fs.listFiles(ingestDir);
     var existingFiles = fs.listFiles(blogDir);
-    for (FileInfo fi : files) {
+    for (FileInfo fi : inFiles) {
         String fn = fi.name;
         int indFixed = -1;
         for (int j = 0; j < fixedCoreFiles.length; j++)  {
@@ -111,8 +115,8 @@ void ingestDocs() {
     // delete old local files
     // delete the to-delete docs
     Ingestion ing = buildIngestion();
-    createNewDocs(ing);
-    updateDocs(ing);
+    createUpdateDocs(ing, false); // create docs
+    createUpdateDocs(ing, true); // update docs
     deleteDocs(ing);
 }
 
@@ -158,6 +162,7 @@ Ingestion buildIngestion() {
             ing.allDocs.add(new Doc(inTargetSubf));
         }
     }
+    ing.finalize();
     return ing;
 }
 
@@ -206,7 +211,7 @@ String buildDocument(CreateUpdate createUpdate, String old, String updatedDt) {
         throw new RuntimeException("Can't build a document with no inputs!");
     }
     String mainSource;
-    boolean isOld;
+    boolean isOld = false;
     if (createUpdate.newContent != "") {
         mainSource = createUpdate.newContent;
     } else {
@@ -223,16 +228,14 @@ String buildDocument(CreateUpdate createUpdate, String old, String updatedDt) {
     String dateStamp = buildDateStamp(createdDt, updatedDt);
 
     L<String> globalScripts = new L();
-    int indBody = mainSource.indexOf("<body>");
-    if (indBody < 0) {
-        throw new RuntimeException("Body not found in the HTML document");
-    }
-    String content = extractContent(mainSource, isOld);
 
+    String content = extractContent(mainSource, isOld);
+    print("extracted content");
+    print(content);
     String localScriptName =
             parseHead(mainSource, new Dir(blogDir, createUpdate.targetDir), globalScripts);
     L<Substitution> subs = parseBodySubstitutions(content, dateStamp);
-    for (var s : subs)  {
+    for (var s : subs) {
         print("Subst from byte " + s.startByte + " to " + s.endByte);
     }
 
@@ -244,7 +247,7 @@ String buildDocument(CreateUpdate createUpdate, String old, String updatedDt) {
 
 
 void buildHead(String localScriptName, L<String> globalScripts, StringBuilder result) {
-    result.append(template0);
+    result.append(templateHtmlStart);
     result.append("    <script type=\"text/javascript\" src=\"/blog/script.js\"></script>\n");
     for (String gs : globalScripts) {
         if (globalVersions.containsKey(gs)) {
@@ -257,6 +260,7 @@ void buildHead(String localScriptName, L<String> globalScripts, StringBuilder re
                 + "\"></script>\n");
     }
     result.append("    <link rel=\"stylesheet\" href=\"/blog/style.css\" />");
+
     result.append("\n</head>\n");
 }
 
@@ -264,13 +268,14 @@ void buildHead(String localScriptName, L<String> globalScripts, StringBuilder re
 static String extractContent(String html, boolean isOld) {
     /// For an old file, it extracts the contents of the `<div id="_content">` tag
     /// For a new file, it extracts the contents of the `<body>` tag
+    int indStart;
+    int indEnd;
     if (isOld) {
-        String opener = "<div id=\"_content\">";
-        int indStart = html.indexOf(opener) + opener.length();
-        int indEnd = html.indexOf("<div id=\"_content\">");
+        indStart = html.indexOf(contentStartMarker) + contentStartMarker.length();
+        indEnd = html.indexOf(contentEndMarker);
     } else {
-        int indStart = html.indexOf("<body>") + 6;
-        int indEnd = html.indexOf("</body>");
+        indStart = html.indexOf("<body>") + 6;
+        indEnd = html.indexOf("</body>");
     }
     return html.substring(indStart, indEnd);
 }
@@ -281,14 +286,16 @@ static void buildBody(String content, L<Substitution> subs, StringBuilder result
     result.append(templateBodyStart);
     buildContent(content, subs, result);
 
-    result.append(body.substring(curr, content.length()));
+    result.append(content.substring(curr, content.length()));
+    result.append(contentEndMarker);
     result.append(templateEnd);
 }
 
 
 static void buildContent(String content, L<Substitution> subs, StringBuilder result) {
+    int curr = 0;
     for (var sub : subs) {
-        result.append(body.substring(curr, sub.startByte));
+        result.append(content.substring(curr, sub.startByte));
         result.append(sub.text);
         curr = sub.endByte;
     }
@@ -377,31 +384,21 @@ static String parseCreatedDate(String old) {
 }
 
 
-void createNewDocs(Ingestion ing) {
-    for (CreateUpdate cre : ing.createDocs) {
-        Dir targetDir = new Dir(blogDir, cre.targetDir);
-        String freshContent = buildDocument(cre, "", todayDt);
-        fs.saveOverwriteFile(new Dir(blogDir, cre.targetDir), "i.html", freshContent);
+void createUpdateDocs(Ingestion ing, boolean isUpdate) {
+    L<CreateUpdate> cus = (isUpdate) ? ing.updateDocs : ing.createDocs;
+    for (CreateUpdate cu : cus) {
+        Dir targetDir = new Dir(blogDir, cu.targetDir);
 
-        for (var localToDelete : upd.localFiles.filesToDelete) {
-            fs.deleteIfExists(new Dir(blogDir, upd.targetDir), localToDelete);
+        String oldContent = isUpdate ? fs.readTextFile(targetDir, "i.html") : "";
+
+        String freshContent = buildDocument(cu, oldContent, todayDt);
+
+        fs.saveOverwriteFile(new Dir(blogDir, cu.targetDir), "i.html", freshContent);
+
+        for (var localToDelete : cu.localFiles.filesToDelete) {
+            fs.deleteIfExists(new Dir(blogDir, cu.targetDir), localToDelete);
         }
-        fs.deleteDirIfExists(new Dir(ingestDir, upd.sourceDir));
-    }
-}
-
-
-void updateDocs(Ingestion ing) {
-    for (CreateUpdate upd : ing.updateDocs) {
-        Dir targetDir = new Dir(blogDir, upd.targetDir);
-        String oldContent = fs.readTextFile(targetDir, "i.html");
-        String updatedContent = buildDocument(upd, oldContent, todayDt);
-        fs.saveOverwriteFile(new Dir(blogDir, upd.targetDir), "i.html", updatedContent);
-
-        for (var localToDelete : upd.localFiles.filesToDelete) {
-            fs.deleteIfExists(new Dir(blogDir, upd.targetDir), localToDelete);
-        }
-        fs.deleteDirIfExists(new Dir(ingestDir, upd.sourceDir));
+        fs.deleteDirIfExists(new Dir(ingestDir, cu.sourceDir));
     }
 }
 
@@ -414,14 +411,14 @@ void deleteDocs(Ingestion ing) {
 
 
 static Subfolder convertToTargetDir(Subfolder ingestDir) {
-    /// Changes an ingestion subfolder like "a.b.foo" to the nested subfolder "a/b/foo"
+    /// "a.b.foo" -> "a/b/foo"
     String dirParts = ingestDir.cont.replace(" ", "").replace(".", "/");
     return new Subfolder(Paths.get(dirParts).toString());
 }
 
 
 static int getFileVersion(String fn) {
-    /// `file-123.txt` => 123
+    /// `file-123.txt` -> 123
     String withoutExt = shaveOffExtension(fn);
     int indDash = withoutExt.lastIndexOf("-");
     if (indDash < 0) {
@@ -435,12 +432,13 @@ static int getFileVersion(String fn) {
     }
 }
 
+
 static Tu<String, Integer> getNameWithMaxVersion(L<String> filenames) {
     /// For a list like `file.txt, file-2.txt, file-3.txt`, returns 3.
     if (filenames.size() == 0) {
         return new Tu("", 0);
     }
-    L<String> withoutExts = filenames.trans(Utils::shaveOffExtension);
+    L<String> withoutExts = filenames.trans(Blog::shaveOffExtension);
     var versions = new L();
     int maxVersion = 1;
     String result = filenames.get(0);
@@ -495,6 +493,7 @@ static class Ingestion {
     L<Subfolder> deleteDocs = new L(); // list of dirs like `a/b/c`
     L<Doc> allDocs = new L();
     NavTree nav;
+    String navPart; // the navigation JSON embedded in <head>
 
     public void printOut() {
         print("Ingestion constructor, count of create " + createDocs.size()
@@ -504,6 +503,7 @@ static class Ingestion {
 
     public void finalize() {
         this.nav = buildThematic();
+        this.navPart = nav.toJson();
     }
 
     private NavTree buildThematic() {
@@ -562,6 +562,7 @@ static class CreateUpdate {
     Subfolder targetDir; // target dir like `a/b/c`
     String newContent; // content of the new "i.html" file, if it's present
     LocalFiles localFiles; // map from prefix to full filename for local files
+    boolean bumpTheDate; // should we bump the updated date? we shouldn't for global file updates
 
     public CreateUpdate(Subfolder sourceDir, Subfolder targetDir, LocalFiles localFiles)  {
         this.sourceDir = sourceDir;
@@ -672,12 +673,13 @@ record Substitution(int startByte, int endByte, String text) {}
 
 //{{{ Templates
 
-static final String template0 = """
+static final String templateHtmlStart = """
 <!DOCTYPE html>
 <html>
 <head>
     <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; script-src 'self'; base-uri 'self';" />
+    <link rel="icon" type="image/x-icon" href="/blog/favicon.ico"/>
 """;
 
 
@@ -729,7 +731,7 @@ static final String templateBodyStart = """
 
 
 
-static final String templateEnd = """
+static final String templateEnd = """ 
     <div class="_footer">© Egor Sozonov | <a href="https://sozonov.site">Home</a> |
         <a href="/blog/TermsOfUse">Terms of use</a>
     </div>
@@ -739,5 +741,598 @@ static final String templateEnd = """
 </html>
 """;
 
+//}}}
+//{{{ Utils
+//{{{ Println
+
+static <T> void printNoLn(T t) {
+    System.out.print(t);
+}
+
+static <T> void print(T t) {
+    System.out.println(t);
+}
+
+//}}}
+//{{{ List
+
+static final class L<T> implements List<T> {
+    private static final int DEFAULT_CAPACITY = 10;
+    private int size;
+    private int modCount = 0;
+    private T[] data;
+
+    public L(int initCap) {
+        if (initCap < 0) {
+            throw new RuntimeException();
+        }
+        data = (T[]) new Object[initCap];
+    }
+
+    public L() {
+        this(4);
+    }
+
+    public static <T> L<T> of(T... values)  {
+        L<T> result = new L(values.length);
+        for (int i = 0; i < values.length; i++) {
+            result.data[i] = values[i];
+        }
+        result.size = values.length;
+        return result;
+    }
+
+    public int size()  {
+        return size;
+    }
+
+    public boolean isEmpty() {
+        return size == 0;
+    }
+
+    public boolean nonEmpty()  {
+        return size > 0;
+    }
+
+    public int indexOf(Object e) {
+        return -1;
+    }
+
+    public int lastIndexOf(Object e) {
+        return -1;
+    }
+
+    public Object[] toArray() {
+        T[] array = (T[]) new Object[size];
+        System.arraycopy(data, 0, array, 0, size);
+        return array;
+    }
+
+    public <T> T[] toArray(T[] a) {
+        if (a.length < size) {
+            a = (T[]) Array.newInstance(a.getClass().getComponentType(), size);
+        } else if (a.length > size) {
+            a[size] = null;
+        }
+        System.arraycopy(data, 0, a, 0, size);
+        return a;
+    }
+
+    public T get(int index) {
+        checkBoundExclusive(index);
+        return data[index];
+    }
+
+    public T set(int index, T e) {
+        checkBoundExclusive(index);
+        T result = data[index];
+        data[index] = e;
+        return result;
+    }
+
+    public boolean add(T e) {
+        modCount++;
+        if (size == data.length) {
+            ensureCapacity(size + 1);
+        }
+        data[size++] = e;
+        return true;
+    }
+
+    public void add(int index, T e) {
+        checkBoundInclusive(index);
+        modCount++;
+        if (size == data.length) { ensureCapacity(size + 1); }
+        if (index != size) { System.arraycopy(data, index, data, index + 1, size - index); }
+        data[index] = e;
+        size++;
+    }
+
+    public T remove(int index) {
+        checkBoundExclusive(index);
+        T r = data[index];
+        modCount++;
+        --size;
+        if (index != size) { System.arraycopy(data, index + 1, data, index, size - index); }
+        // Aid for garbage collection by releasing this pointer.
+        data[size] = null;
+        return r;
+    }
+
+    public void removeLast() {
+        checkBoundExclusive(size - 1);
+        ++modCount;
+        --size;
+        data[size] = null;
+    }
+
+    public void clear() {
+        if (size == 0) {
+            return;
+        }
+        modCount++;
+        // Allow for garbage collection.
+        Arrays.fill(data, 0, size, null);
+        size = 0;
+    }
+
+    public void ensureCapacity(int minCapacity) {
+        int current = data.length;
+
+        if (minCapacity > current) {
+            T[] newData = (T[]) new Object[Math.max(current * 2, minCapacity)];
+            System.arraycopy(data, 0, newData, 0, size);
+            data = newData;
+        }
+    }
+
+    public boolean addAll(Collection<? extends T> c) {
+        return addAll(size, c);
+    }
+
+    public boolean addAll(int index, Collection<? extends T> c) {
+        checkBoundInclusive(index);
+        Iterator<? extends T> itr = c.iterator();
+        int csize = c.size();
+
+        modCount++;
+        if (csize + size > data.length) { ensureCapacity(size + csize); }
+        int end = index + csize;
+        if (size > 0 && index != size) { System.arraycopy(data, index, data, end, size - index); }
+        size += csize;
+        for ( ; index < end; index++) {
+            data[index] = itr.next();
+        }
+        return csize > 0;
+    }
+
+    @Override
+    public List<T> subList(int fromIndex, int toIndex) {
+        return null;
+    }
+
+    @Override
+    public ListIterator<T> listIterator() {
+        return listIterator(0);
+    }
+
+    @Override
+    public ListIterator<T> listIterator(final int i) {
+        return new LIterator<T>(this);
+    }
+
+    @Override
+    public Iterator<T> iterator() {
+        return listIterator();
+    }
+
+    @Override
+    public boolean retainAll(Collection<?> c) {
+        return false;
+    }
+
+    @Override
+    public boolean contains(Object o) {
+        return false;
+    }
+
+    @Override
+    public boolean removeAll(Collection<?> c) {
+        return false;
+    }
+
+    @Override
+    public boolean remove(Object o) {
+        return false;
+    }
+
+    @Override
+    public boolean containsAll(Collection<?> c) {
+        return false;
+    }
+
+    public void removeRange(int fromIndex, int toIndex) {
+        int change = toIndex - fromIndex;
+        if (change > 0) {
+            modCount++;
+            System.arraycopy(data, toIndex, data, fromIndex, size - toIndex);
+            size -= change;
+        } else if (change < 0) {
+            throw new RuntimeException();
+        }
+    }
+
+    private void checkBoundInclusive(int index) {
+        // Implementation note: we do not check for negative ranges here, since
+        // use of a negative index will cause a RuntimeException,
+        // a subclass of the required exception, with no effort on our part.
+        if (index > size) {
+            throw new RuntimeException("Index: " + index + ", Size: " + size);
+        }
+    }
+
+    private void checkBoundExclusive(int index) {
+        // Implementation note: we do not check for negative ranges here, since
+        // use of a negative index will cause a RuntimeException,
+        // a subclass of the required exception, with no effort on our part.
+        if (index >= size) {
+            throw new RuntimeException("Index: " + index + ", Size: " + size);
+        }
+    }
+
+    boolean removeAllInternal(Collection<?> c) {
+        int i;
+        int j;
+        for (i = 0; i < size; i++) {
+            if (c.contains(data[i])) {
+                break;
+            }
+        }
+        if (i == size) {
+            return false;
+        }
+
+        modCount++;
+        for (j = i++; i < size; i++) {
+            if (!c.contains(data[i])) {
+                data[j++] = data[i];
+            }
+        }
+        size -= i - j;
+        return true;
+    }
+
+    public int findIndex(Function<T, Boolean> pred)  {
+        for (int i = 0; i < size; i++) {
+            if (pred.apply(data[i])) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public void append(L<T> other) {
+        if (other.isEmpty()) {
+            return;
+        }
+        ensureCapacity(size + other.size());
+        for (int j = 0, i = size; j < other.size(); j++, i++) {
+            data[i] = other.get(j);
+        }
+        size += other.size();
+    }
+
+    public <U> L<U> trans(Function<T, U> transformer) {
+        L<U> result = new L(this.size);
+        for (int i = 0; i < size; i++) {
+            result.data[i] = transformer.apply(data[i]);
+        }
+        result.size = this.size;
+        return result;
+    }
+
+    public <U> L<U> transIf(Predicate<T> pred, Function<T, U> transformer) {
+        L<U> result = new L(this.size);
+        int j = 0;
+        for (int i = 0; i < size; i++) {
+            T elt = data[i];
+            if (pred.test(elt)) {
+                result.data[j] = transformer.apply(elt);
+                j++;
+            }
+        }
+        result.size = j;
+        return result;
+    }
+
+    public L<T> filter(Predicate<T> pred) {
+        L<T> result = new L();
+        int j = 0;
+        for (int i = 0; i < size; i++) {
+            T elt = data[i];
+            if (pred.test(elt)) {
+                result.add(elt);
+                j++;
+            }
+        }
+        return result;
+    }
+
+    public Optional<T> first(Predicate<T> pred) {
+        /// Find index of first element satisfying predicate.
+        /// The method missing from the Java streams
+        for (int i = 0; i < size; i++) {
+            if (pred.test(data[i])) {
+                return Optional.of(data[i]);
+            }
+        }
+        return Optional.empty();
+    }
+
+    public boolean any(Predicate<T> pred) {
+        /// Find index of first element satisfying predicate.
+        /// The method missing from the Java streams
+        for (int i = 0; i < size; i++) {
+            if (pred.test(data[i])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public T last() {
+        /// Returns the last element. Assumes the list is non-empty
+        return data[size - 1];
+    }
+
+
+    public Set<T> toSet() {
+        Set<T> result = new HashSet<T>();
+        for (int i = 0; i < size; ++i) {
+            result.add(data[i]);
+        }
+        return result;
+    }
+
+
+    public static class LIterator<T> implements ListIterator<T> {
+        private int i;
+        private int size;
+        private L<T> lst;
+        private int expectedModCount;
+
+        public LIterator(L<T> lst) {
+            this.i = -1;
+            this.size = lst.size;
+            this.lst = lst;
+            expectedModCount = lst.modCount;
+        }
+
+        public boolean hasNext() {
+            return i < size - 1;
+        }
+
+        public T next() {
+            if (i < size - 1) {
+                i++;
+                return lst.data[i];
+            } else {
+                throw new RuntimeException();
+            }
+        }
+
+        public boolean hasPrevious() {
+            return i > 0;
+        }
+
+        public T previous() {
+            if (i > 0) {
+                i--;
+                return lst.data[i];
+            } else {
+                throw new RuntimeException();
+            }
+        }
+
+        public int nextIndex() {
+            return i + 1;
+        }
+
+        public int previousIndex() {
+            return i - 1;
+        }
+
+        public void remove() {
+            lst.remove(i);
+            lst.modCount++;
+        }
+
+        public void set(T e) {
+            lst.set(i, e);
+        }
+
+        public void add(T e) {
+            lst.add(e);
+            expectedModCount++;
+        }
+
+        void checkForComodification() {
+            if (lst.modCount != expectedModCount) {
+                throw new RuntimeException();
+            }
+        }
+
+
+    }
+}
+
+//}}}
+//{{{ Tu
+
+static class Tu<F, S> {
+    public F f1;
+    public S f2;
+    public Tu(F f, S s) {
+        f1 = f;
+        f2 = s;
+    }
+}
+
+//}}}
+//{{{ Misc
+
+static String shaveOffExtension(String fN) {
+    int indDot = fN.indexOf(".");
+    if (indDot < 0) {
+        return fN;
+    }
+    return fN.substring(0, indDot);
+}
+
+
+static Optional<Integer> parseInt(String s) {
+    try {
+        return Optional.of(Integer.parseInt(s));
+    } catch(Exception e) {
+        return Optional.empty();
+    }
+}
+
+
+static final String[] months = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "July", "Aug",
+        "Sep", "Oct", "Nov", "Dec" };
+
+
+static String monthNameOf(String dt) {
+    /// "2023-04-01" => "Apr"
+    int monthNum = Integer.parseInt(dt.substring(5, 7));
+    return months[monthNum - 1];
+}
+
+
+static L<String> getNamesWithPrefix(UnvName fn, L<FileInfo> existingFiles) {
+    /// fN should be full (with extension)
+    String fnWoExt = shaveOffExtension(fn.cont) + "-";
+    String ext = fn.cont.substring(fnWoExt.length() - 1);
+    return existingFiles
+            .transIf(x -> x.name.equals(fn.cont)
+                            || (x.name.startsWith(fnWoExt) && x.name.endsWith(ext)),
+                    y -> y.name);
+}
+
+//}}}
+//{{{ Directories and files
+
+public static class Dir {
+    public String cont;
+
+    public Dir(Dir absDir, Subfolder subf)  {
+        this.cont = Paths.get(absDir.cont, subf.cont).toString();
+    }
+
+    private Dir(String s)  {
+        this.cont = Paths.get(s).toString();
+    }
+
+    public static Dir ofString(String absPath)  {
+        if (!absPath.startsWith("/")) {
+            throw new RuntimeException("An absolute path must start with `/`!");
+        }
+        return new Dir(absPath);
+    }
+}
+
+
+public static class Subfolder {
+    public String cont;
+    public Subfolder(String cont) {
+        this.cont = cont;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return this.cont.equals(((Subfolder)o).cont);
+    }
+
+    @Override
+    public int hashCode() {
+        return this.cont.hashCode();
+    }
+}
+
+static class UnvName {
+    /// An unversioned file name, so if the whole name is "asdf-11.jpg", this will be "asdf.jpg"
+    String cont;
+    UnvName(String fn) {
+        String withoutExt = shaveOffExtension(fn);
+        int indDash = withoutExt.lastIndexOf("-");
+        if (indDash < 0) {
+            this.cont = fn;
+            return;
+        }
+        this.cont = withoutExt.substring(0, indDash) + fn.substring(withoutExt.length());
+    }
+
+    String toVersion(int n) {
+        String withoutExt = shaveOffExtension(this.cont);
+        return withoutExt
+                + "-" + Integer.toString(n) + this.cont.substring(withoutExt.length() + 1);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return this.cont.equals(((UnvName)o).cont);
+    }
+
+    @Override
+    public int hashCode() {
+        return this.cont.hashCode();
+    }
+}
+
+//}}}
+//{{{ Filesys
+
+static class FileInfo {
+    String name;
+    Instant modified;
+
+    public FileInfo(String name, Instant modif)  {
+        this.name = name;
+        this.modified = modif;
+    }
+}
+
+interface FileSys {
+    boolean dirExists(Dir dir);
+    L<FileInfo> listFiles(Dir dir); // immediate files in a dir
+    L<Subfolder> listSubfolders(Dir dir); // immediate subfolders of child dirs
+    L<Subfolder> listSubfoldersContaining(Dir dir, String fN); // recursively list all nested dirs
+    String readTextFile(Dir dir, String fN);
+    boolean saveOverwriteFile(Dir dir, String fN, String cont);
+    boolean moveFileWithRename(Dir dir, String fN, Dir targetDir, String newName);
+    boolean deleteIfExists(Dir dir, String fN);
+    boolean deleteDirIfExists(Dir dir);
+}
+
+
+// Implementation
+//~    try (Stream<Path> walk = Files.walk(Paths.get(blogDir))) {
+//~        walk.filter(Files::isDirectory)
+//~            .forEach(x -> {
+//~                oldDirs.add(x.toString());
+//~            });
+//~    } catch (Exception e) {
+//~        System.out.println(e.getMessage());
+//~    }
+
+//}}}
+//{{{ FileSys implementation
+
+class BlogFileSys {
+
+}
+
+//}}}
 //}}}
 }
