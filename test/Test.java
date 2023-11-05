@@ -423,10 +423,8 @@ static void createNewDoc() {
 
     Dir pathNewDoc = new Dir(blogDir, new Subfolder("a/b/c"));
     L<FileInfo> result = fs.listFiles(pathNewDoc);
-    print("size " + result.size() + ", name " + result.get(0).name);
-    String cont = Blog.extractContent(fs.readTextFile(pathNewDoc, "i.html"), true);
-    print("got:");
-    print(cont);
+    String fullFile = fs.readTextFile(pathNewDoc, "i.html");
+    String cont = Blog.extractContent(fullFile, true);
     blAssert(cont.equals(expectedContent));
 }
 
@@ -488,8 +486,8 @@ public static void main(String[] args) {
 //~    runTest(Test::unvName, counters);
 
 //~    runTest(Test::moveAndReadLocalFilesTest, counters);
-    runTest(Test::parseContentTest, counters);
-//~    runTest(Test::createNewDoc, counters);
+//~    runTest(Test::parseContentTest, counters);
+    runTest(Test::createNewDoc, counters);
 //~    runTest(Test::updateDoc, counters);
 
     if (counters.countFailed > 0)  {

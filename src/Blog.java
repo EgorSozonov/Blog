@@ -206,7 +206,7 @@ LocalFiles moveAndReadLocalFiles(L<FileInfo> inFiles, Dir inSourceDir, Dir inTar
 }
 
 
-String buildDocument(CreateUpdate createUpdate, String old, String updatedDt) {
+String buildDocument(CreateUpdate createUpdate, String old, String updatedDt, Ingestion ing) {
     if (old == "" && createUpdate.newContent == "") {
         throw new RuntimeException("Can't build a document with no inputs!");
     }
@@ -218,35 +218,32 @@ String buildDocument(CreateUpdate createUpdate, String old, String updatedDt) {
         mainSource = old;
         isOld = true;
     }
-    String createdDt = "";
-    if (old == "") {
-        createdDt = updatedDt;
-    } else {
-        createdDt = parseCreatedDate(old);
-    }
-
-    String dateStamp = buildDateStamp(createdDt, updatedDt);
 
     L<String> globalScripts = new L();
 
     String content = extractContent(mainSource, isOld);
+    String createdDt = "";
+    if (old == "") {
+        createdDt = updatedDt;
+    } else {
+        createdDt = parseCreatedDate(content);
+    }
+    String dateStamp = buildDateStamp(createdDt, updatedDt);
     print("extracted content");
     print(content);
     String localScriptName =
             parseHead(mainSource, new Dir(blogDir, createUpdate.targetDir), globalScripts);
     L<Substitution> subs = parseBodySubstitutions(content, dateStamp);
-    for (var s : subs) {
-        print("Subst from byte " + s.startByte + " to " + s.endByte);
-    }
 
     var result = new StringBuilder();
-    buildHead(localScriptName, globalScripts, result);
+    buildHead(localScriptName, globalScripts, ing, result);
     buildBody(content, subs, result);
     return result.toString();
 }
 
 
-void buildHead(String localScriptName, L<String> globalScripts, StringBuilder result) {
+void buildHead(String localScriptName, L<String> globalScripts, Ingestion ing,
+               StringBuilder result) {
     result.append(templateHtmlStart);
     result.append("    <script type=\"text/javascript\" src=\"/blog/script.js\"></script>\n");
     for (String gs : globalScripts) {
@@ -260,7 +257,7 @@ void buildHead(String localScriptName, L<String> globalScripts, StringBuilder re
                 + "\"></script>\n");
     }
     result.append("    <link rel=\"stylesheet\" href=\"/blog/style.css\" />");
-
+    result.append(ing.navPart);
     result.append("\n</head>\n");
 }
 
@@ -272,6 +269,9 @@ static String extractContent(String html, boolean isOld) {
     int indEnd;
     if (isOld) {
         indStart = html.indexOf(contentStartMarker) + contentStartMarker.length();
+        print("html");
+        print(html);
+        print(indStart);
         indEnd = html.indexOf(contentEndMarker);
     } else {
         indStart = html.indexOf("<body>") + 6;
@@ -282,11 +282,8 @@ static String extractContent(String html, boolean isOld) {
 
 
 static void buildBody(String content, L<Substitution> subs, StringBuilder result) {
-    int curr = 0;
     result.append(templateBodyStart);
     buildContent(content, subs, result);
-
-    result.append(content.substring(curr, content.length()));
     result.append(contentEndMarker);
     result.append(templateEnd);
 }
@@ -295,10 +292,13 @@ static void buildBody(String content, L<Substitution> subs, StringBuilder result
 static void buildContent(String content, L<Substitution> subs, StringBuilder result) {
     int curr = 0;
     for (var sub : subs) {
+        print("curr = " + curr + ", startByte = " + sub.startByte);
+        print("sub text = " + sub.text);
         result.append(content.substring(curr, sub.startByte));
         result.append(sub.text);
         curr = sub.endByte;
     }
+    result.append(content.substring(curr, content.length()));
 }
 
 
@@ -340,7 +340,7 @@ String parseHead(String old, Dir targetDir, /* out */ L<String> globalCoreScript
 static L<Substitution> parseBodySubstitutions(String body, String dateStamp) {
     /// Produces a list of substitutions sorted by start byte.
     L<Substitution> result = new L();
-    int start = 6; // 6 to skip the `<body>`
+    int start = 0; // 6 to skip the `<body>`
 
     // the date stamp
     int indStampOpen = body.indexOf(stampOpen);
@@ -380,7 +380,7 @@ static String parseCreatedDate(String old) {
     int indEnd = old.indexOf(stampClose);
     int indDateStart = indStart + stampOpen.length();
     String datePart = old.substring(indDateStart, indEnd);
-    return datePart.substring(14, 24); // Skipping length of `<div>Created: `
+    return datePart.substring(25, 35); // Skipping length of `<div id="_dtSt">Created: `
 }
 
 
@@ -391,8 +391,7 @@ void createUpdateDocs(Ingestion ing, boolean isUpdate) {
 
         String oldContent = isUpdate ? fs.readTextFile(targetDir, "i.html") : "";
 
-        String freshContent = buildDocument(cu, oldContent, todayDt);
-
+        String freshContent = buildDocument(cu, oldContent, todayDt, ing);
         fs.saveOverwriteFile(new Dir(blogDir, cu.targetDir), "i.html", freshContent);
 
         for (var localToDelete : cu.localFiles.filesToDelete) {
@@ -503,7 +502,6 @@ static class Ingestion {
 
     public void finalize() {
         this.nav = buildThematic();
-        this.navPart = nav.toJson();
     }
 
     private NavTree buildThematic() {
@@ -603,53 +601,77 @@ static class NavTree {
         this.currInd = 0;
     }
 
-    static int[] createBreadcrumbs(String subAddress) {
+    L<Integer> createBreadcrumbs(Subfolder subf) {
         /// Make breadcrumbs that trace the way to this file from the root.
-        return null;
+        if (this.name.length() > 0 || this.children.size() == 0) {
+            return new L();
+        }
+        var spl = subf.cont.split("/");
+        L<Integer> result = new L(spl.length);
+        var curr = this.children;
+        for (int i = 0; i < spl.length; i++) {
+            final String nm = spl[i];
+            result.add(curr.findIndex(x -> x.name.equals(nm)));
+            curr = curr.get(result.get(i)).children;
+        }
+        int leafIndex = curr.findIndex(x -> x.name.equals(subf.cont));
+        if (leafIndex < 0) {
+            return new L();
+        }
+        result.set(spl.length - 1, leafIndex);
+        return result;
     }
 
-    String toJson() {
-         var st = new L<NavTree>();
-         if (this.children.size() == 0) {
-             return "";
-         }
+    String toJson(Subfolder subf) {
+        var st = new L<NavTree>();
+        if (this.children.size() == 0) {
+            return "";
+        }
 
-         var result = new StringBuilder(100);
-         st.add(this);
-         while (st.nonEmpty()) {
-             var top = st.last();
+        var result = new StringBuilder(100);
+        result.append("""
+        <script type="application/json" id="_navState">{
+           cLoc: [""");
+        writeCommaSeparatedToBuffer(createBreadcrumbs(subf), result);
+        result.append("],\n");
+        result.append("    nav: [\n");
+        st.add(this);
+        while (st.nonEmpty()) {
+            var top = st.last();
 
-             if (top.currInd < top.children.size()) {
-                 var next = top.children.get(top.currInd);
-                 if (next.children.size() > 0) {
-                     result.append("[\"");
-                     result.append(next.name);
-                     result.append("\", [");
-                     st.add(next);
-                 } else {
-                     result.append("[\"");
-                     result.append(next.name);
-                     if (top.currInd == top.children.size() - 1) {
-                         result.append("\", [] ] ");
-                     } else {
-                         result.append("\", [] ], ");
-                     }
-                 }
-             } else {
-                  st.removeLast();
+            if (top.currInd < top.children.size()) {
+                var next = top.children.get(top.currInd);
+                if (next.children.size() > 0) {
+                    result.append("[\"");
+                    result.append(next.name);
+                    result.append("\", [");
+                    st.add(next);
+                } else {
+                    result.append("[\"");
+                    result.append(next.name);
+                    if (top.currInd == top.children.size() - 1) {
+                        result.append("\", [] ] ");
+                    } else {
+                        result.append("\", [] ], ");
+                    }
+                }
+            } else {
+                st.removeLast();
 
-                  if (st.nonEmpty()) {
-                      var parent = st.last();
-                      if (parent.currInd < parent.children.size()) {
-                          result.append("]], ");
-                      } else {
-                          result.append("]] ");
-                      }
-                  }
-             }
-             ++top.currInd;
-         }
-         return result.toString();
+                if (st.nonEmpty()) {
+                    var parent = st.last();
+                    if (parent.currInd < parent.children.size()) {
+                        result.append("]], ");
+                    } else {
+                        result.append("]] ");
+                    }
+                }
+            }
+            ++top.currInd;
+        }
+        result.append("]\n");
+        result.append("}</script>");
+        return result.toString();
     }
 }
 
@@ -690,8 +712,7 @@ static final String templateBodyStart = """
     <div class="_menuTop">
         <div class="_svgButton" title="Temporal sorting">
             <a id="_reorderTemporal" title="Temporal sorting">
-                <svg id="_sorterTemp" class="_swell" width="30" height="30"
-                    viewBox="0 0 100 100">
+                <svg id="_sorterTemp" class="_swell" width="30" height="30" viewBox="0 0 100 100">
                     <circle r="48" cx="50" cy="50" />
                     <path d="M 35 20 h 30 c 0 30 -30 30 -30 60 h 30
                              c 0 -30 -30 -30 -30 -60" />
@@ -700,8 +721,7 @@ static final String templateBodyStart = """
         </div>
         <div class="_svgButton">
             <a href="http://sozonov.site" title="Home page">
-                <svg id="_homeIcon" class="_swell" width="30" height="30"
-                 viewBox="0 0 100 100">
+                <svg id="_homeIcon" class="_swell" width="30" height="30" viewBox="0 0 100 100">
                     <circle r="48" cx="50" cy="50" />
                     <path d="M 30 45 h 40 v 25 h -40 v -25 " />
                     <path d="M 22 50 l 28 -25 l 28 25" />
@@ -715,23 +735,23 @@ static final String templateBodyStart = """
 <div class="_divider" id="_divider">&lt;</div>
 <div class="_menuToggler _hidden" id="_menuToggler">
     <div class="_svgButton" title="Open menu">
-            <a id="_toggleNavBar">
-                <svg class="_swell" width="30" height="30" viewBox="0 0 100 100">
-                    <circle r="48" cx="50" cy="50"></circle>
-                    <path d="M 30 35 h 40" stroke-width="6"></path>
-                    <path d="M 30 50 h 40" stroke-width="6"></path>
-                    <path d="M 30 65 h 40" stroke-width="6"></path>
-                </svg>
-            </a>
+        <a id="_toggleNavBar">
+            <svg class="_swell" width="30" height="30" viewBox="0 0 100 100">
+                <circle r="48" cx="50" cy="50"></circle>
+                <path d="M 30 35 h 40" stroke-width="6"></path>
+                <path d="M 30 50 h 40" stroke-width="6"></path>
+                <path d="M 30 65 h 40" stroke-width="6"></path>
+            </svg>
+        </a>
     </div>
 </div>
 
-<div class="_content">
+<div id="_content">
 """;
 
 
 
-static final String templateEnd = """ 
+static final String templateEnd = """
     <div class="_footer">© Egor Sozonov | <a href="https://sozonov.site">Home</a> |
         <a href="/blog/TermsOfUse">Terms of use</a>
     </div>
@@ -1199,14 +1219,27 @@ static Optional<Integer> parseInt(String s) {
 }
 
 
-static final String[] months = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "July", "Aug",
-        "Sep", "Oct", "Nov", "Dec" };
+static final String[] months = {
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "July", "Aug", "Sep", "Oct", "Nov", "Dec"
+};
 
 
 static String monthNameOf(String dt) {
-    /// "2023-04-01" => "Apr"
+    /// "2023-04-01" -> "Apr"
     int monthNum = Integer.parseInt(dt.substring(5, 7));
     return months[monthNum - 1];
+}
+
+
+static void writeCommaSeparatedToBuffer(L<Integer> ints, StringBuilder wr) {
+    if (ints.size() == 0) {
+        return;
+    }
+    wr.append(ints.get(0));
+    for (int i = 1; i < ints.size(); i++) {
+        wr.append(",");
+        wr.append(ints.get(i));
+    }
 }
 
 
@@ -1295,11 +1328,9 @@ static class UnvName {
 
 static class FileInfo {
     String name;
-    Instant modified;
 
-    public FileInfo(String name, Instant modif)  {
+    public FileInfo(String name)  {
         this.name = name;
-        this.modified = modif;
     }
 }
 
@@ -1329,8 +1360,121 @@ interface FileSys {
 //}}}
 //{{{ FileSys implementation
 
-class BlogFileSys {
+class BlogFileSys implements FileSys {
+    @Override
+    public boolean dirExists(Dir dir) {
+        return Files.isDirectory(Paths.get(dir.cont));
+    }
 
+    @Override
+    public L<FileInfo> listFiles(Dir dir) {
+        return Stream.of(new File(dir).listFiles())
+                .filter(file -> !file.isDirectory())
+                .map(x -> new FileInfo(x.getName));
+    }
+
+    @Override
+    public L<Subfolder> listSubfolders(Dir dir) {
+        String dirWithSl = (dir.cont.endsWith("/")) ? dir.cont : (dir.cont + "/");
+        int prefixLength = dirWithSl.length();
+        L<Subfolder> result = new L();
+        for (String key : fs.keySet()) {
+            if (key.startsWith(dirWithSl)) {
+                result.add(new Subfolder(key.substring(prefixLength)));
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public L<Subfolder> listSubfoldersContaining(Dir dir, String fN) {
+        /// Gets the list of directories containing a filename, for example "i.html"
+        String dirWithSl = (dir.cont.endsWith("/")) ? dir.cont : (dir.cont + "/");
+        int prefixLength = dirWithSl.length();
+        L<Subfolder> result = new L(10);
+        for (var e : fs.entrySet()) {
+            if (e.getKey().startsWith(dirWithSl)
+                    && e.getValue().any(x -> x.name.equals("i.html"))) {
+                result.add(new Subfolder(e.getKey().substring(prefixLength)));
+            }
+        }
+        return result;
+    }
+
+    @Override
+    public String readTextFile(Dir dir, String fN) {
+        if (!fs.containsKey(dir.cont)) {
+            return "";
+        }
+        return fs.get(dir.cont).first(x -> x.name.equals(fN)).map(x -> x.cont).orElse("");
+    }
+
+    @Override
+    public boolean saveOverwriteFile(Dir dir, String fN, String cont) {
+        var newFile = new MockFile(fN, cont, Instant.now());
+        if (fs.containsKey(dir.cont)) {
+            var existingFiles = fs.get(dir.cont);
+            var indexExisting = existingFiles.findIndex(x -> x.name.equals(fN));
+            if (indexExisting == -1) {
+                existingFiles.add(newFile);
+            } else {
+                existingFiles.set(indexExisting, newFile);
+            }
+        } else {
+            fs.put(dir.cont, L.of(newFile));
+        }
+        return true;
+    }
+
+
+    @Override
+    public boolean moveFileWithRename(Dir dir, String fN, Dir targetDir, String newName) {
+        var sourceFiles = fs.get(dir.cont);
+        int indexSource = sourceFiles.findIndex(x -> x.name.equals(fN));
+        MockFile theFile = sourceFiles.get(indexSource);
+        theFile.name = newName;
+        L<MockFile> targetFiles = fs.get(targetDir.cont);
+        sourceFiles.remove(indexSource);
+        if (targetFiles == null) {
+            fs.put(targetDir.cont, L.of(theFile));
+            return true;
+        }
+
+        var existingInd = targetFiles.indexOf(newName);
+        if (existingInd < 0) {
+            targetFiles.add(theFile);
+        } else {
+            targetFiles.set(existingInd, theFile);
+        }
+
+        return true;
+    }
+
+    @Override
+    public boolean deleteIfExists(Dir dir, String fN) {
+        if (!fs.containsKey(dir.cont)) {
+            return false;
+        }
+        var existingFiles = fs.get(dir.cont);
+        int indexExisting = existingFiles.findIndex(x -> x.name.equals(fN));
+        if (indexExisting > -1) {
+            existingFiles.remove(indexExisting);
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean deleteDirIfExists(Dir dir) {
+        /// Deletes a dir with all its contents and subfolders
+        for (String dirName : fs.keySet()) {
+            if (dirName.startsWith(dir.cont)) {
+                fs.remove(dirName);
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 //}}}
