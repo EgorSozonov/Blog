@@ -1,6 +1,7 @@
 package tech.sozonov.blog;
 //{{{ Imports
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
@@ -16,9 +17,13 @@ import java.util.function.Function;
 import java.lang.reflect.Array;
 import java.nio.file.Paths;
 import java.nio.file.Files;
+import java.io.File;
+import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.Comparator;
+import java.util.stream.Stream;
 
 //}}}
 
@@ -134,7 +139,7 @@ class BlogFileSys implements FileSys {
     public L<FileInfo> listFiles(Dir dir) {
         return Stream.of(new File(dir.cont).listFiles())
                 .filter(file -> !file.isDirectory())
-                .map(x -> new FileInfo(x.getName));
+                .map(x -> new FileInfo(x.getName()));
     }
 
     @Override
@@ -172,70 +177,71 @@ class BlogFileSys implements FileSys {
     }
 
     @Override
-    public boolean saveOverwriteFile(Dir dir, String fN, String cont) {
-        var newFile = new MockFile(fN, cont, Instant.now());
-        if (fs.containsKey(dir.cont)) {
-            var existingFiles = fs.get(dir.cont);
-            var indexExisting = existingFiles.findIndex(x -> x.name.equals(fN));
-            if (indexExisting == -1) {
-                existingFiles.add(newFile);
-            } else {
-                existingFiles.set(indexExisting, newFile);
-            }
-        } else {
-            fs.put(dir.cont, L.of(newFile));
-        }
-        return true;
-    }
-
-
-    @Override
-    public boolean moveFileWithRename(Dir dir, String fN, Dir targetDir, String newName) {
-        var sourceFiles = fs.get(dir.cont);
-        int indexSource = sourceFiles.findIndex(x -> x.name.equals(fN));
-        MockFile theFile = sourceFiles.get(indexSource);
-        theFile.name = newName;
-        L<MockFile> targetFiles = fs.get(targetDir.cont);
-        sourceFiles.remove(indexSource);
-        if (targetFiles == null) {
-            fs.put(targetDir.cont, L.of(theFile));
-            return true;
-        }
-
-        var existingInd = targetFiles.indexOf(newName);
-        if (existingInd < 0) {
-            targetFiles.add(theFile);
-        } else {
-            targetFiles.set(existingInd, theFile);
-        }
-
-        return true;
-    }
-
-    @Override
-    public boolean deleteIfExists(Dir dir, String fN) {
-        if (!fs.containsKey(dir.cont)) {
+    public boolean saveOverwriteFile(Dir dir, String fn, String cont) {
+        // Target dir must exist
+        File targetOsDir = new File(Paths.get(dir.cont));
+        if (!targetOsDir.exists() || !Files.isDirectory(dir)) {
             return false;
         }
-        var existingFiles = fs.get(dir.cont);
-        int indexExisting = existingFiles.findIndex(x -> x.name.equals(fN));
-        if (indexExisting > -1) {
-            existingFiles.remove(indexExisting);
-            return true;
+        Path targetPath = Paths.get(dir.cont, fn);
+        File targetFile = new File(targetPath);
+        if (targetFile.exists()) {
+            if (targetFile.isDirectory()) {
+                return false;
+            }
+            targetFile.delete();
         }
-        return false;
+        Files.write(targetPath, cont.getBytes(StandardCharsets.UTF_8));
+        return true;
+    }
+
+
+    @Override
+    public boolean moveFileWithRename(Dir dir, String fn, Dir targetDir, String newName) {
+        /// Source file and target dir must exist
+        File sourceFile = new File(Paths.get(dir.cont, fn));
+        if (!sourceFile.exists() || Files.isDirectory(sourceFile)) {
+            return false;
+        }
+        File targetOsDir = new File(Paths.get(targetDir.cont));
+        if (!targetOsDir.exists() || !Files.isDirectory(targetOsDir)) {
+            return false;
+        }
+        File targetFile = new File(Paths.get(targetDir.cont, newName));
+        if (targetFile.exists()) {
+            if (targetFile.isDirectory()) {
+                return false;
+            }
+            targetFile.delete();
+        }
+        Files.move(sourceFile, targetFile);
+        return true;
+    }
+
+    @Override
+    public boolean deleteIfExists(Dir dir, String fn) {
+        Path thePath = Paths.get(dir.cont, fn);
+        File theFile = new File(thePath);
+        if (!theFile.exists() || Files.isDirectory(theFile)) {
+            return false;
+        }
+        theFile.delete();
+        return true;
     }
 
     @Override
     public boolean deleteDirIfExists(Dir dir) {
         /// Deletes a dir with all its contents and subfolders
-        for (String dirName : fs.keySet()) {
-            if (dirName.startsWith(dir.cont)) {
-                fs.remove(dirName);
-                return true;
-            }
+        Path thePathToDelete = Paths.get(dir.cont);
+        var theFolder = new File(thePathToDelete);
+        if (!theFolder.exists() || !Files.isDirectory(theFolder)) {
+            return false;
         }
-        return false;
+        Files.walk(thePathToDelete)
+                .sorted(Comparator.reverseOrder())
+                .map(Path::toFile)
+                .forEach(File::delete);
+        return true;
     }
 }
 
