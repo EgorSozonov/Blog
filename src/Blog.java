@@ -1181,8 +1181,6 @@ static final class L<T> implements List<T> {
                 throw new RuntimeException();
             }
         }
-
-
     }
 }
 
@@ -1337,7 +1335,7 @@ static class FileInfo {
 interface FileSys {
     boolean dirExists(Dir dir);
     L<FileInfo> listFiles(Dir dir); // immediate files in a dir
-    L<Subfolder> listSubfolders(Dir dir); // immediate subfolders of child dirs
+    L<Subfolder> listSubfolders(Dir dir); // immediate subfolders of a directory
     L<Subfolder> listSubfoldersContaining(Dir dir, String fN); // recursively list all nested dirs
     String readTextFile(Dir dir, String fN);
     boolean saveOverwriteFile(Dir dir, String fN, String cont);
