@@ -137,9 +137,12 @@ class BlogFileSys implements FileSys {
 
     @Override
     public L<FileInfo> listFiles(Dir dir) {
-        return Stream.of(new File(dir.cont).listFiles())
+        var result = new L();
+        var files = Stream.of(new File(dir.cont).listFiles())
                 .filter(file -> !file.isDirectory())
-                .map(x -> new FileInfo(x.getName()));
+                .map(x -> new FileInfo(x.getName())).toList();
+        result.addAll(files);
+        return result;
     }
 
     @Override
@@ -148,9 +151,11 @@ class BlogFileSys implements FileSys {
         L<Subfolder> result = new L();
         String prefixWithSl = dir.cont.endsWith("/") ? dir.cont : dir.cont + "/";
         try (Stream<Path> paths = Files.walk(Paths.get(dir.cont))) {
-            walk.filter(Files::isDirectory)
-                    .map(x -> result.add(new Subfolder(x.name.substring(prefixWithSl.length()))));
-        }
+            paths.filter(Files::isDirectory)
+                    .map(x ->
+                        result.add(
+                            new Subfolder(x.toString().substring(prefixWithSl.length()))));
+        } catch (Exception e) {}
         return result;
     }
 
@@ -160,38 +165,50 @@ class BlogFileSys implements FileSys {
         L<Subfolder> result = new L();
         String prefixWithSl = dir.cont.endsWith("/") ? dir.cont : dir.cont + "/";
         try (Stream<Path> paths = Files.walk(Paths.get(dir.cont))) {
-            walk.filter(x -> Files.isDirectory(x) && (new File(Paths.get(x.path, fn))).exists())
-                    .map(x -> result.add(new Subfolder(x.name.substring(prefixWithSl.length()))));
-        }
+            paths.filter(x -> Files.isDirectory(x)
+                            && (new File(Paths.get(x.toString(), fn).toString())).exists())
+                    .map(x ->
+                            result.add(
+                                    new Subfolder(x.toString().substring(prefixWithSl.length()))));
+        } catch (Exception e) {}
         return result;
     }
 
     @Override
     public String readTextFile(Dir dir, String fn) {
         Path thePath = Paths.get(dir.cont, fn);
-        File theFile = new File(thePath);
+        File theFile = new File(thePath.toString());
         if (!theFile.exists()) {
             return "";
         }
-        return Files.readString(thePath);
+        try {
+            return Files.readString(thePath);
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage());
+        }
     }
 
     @Override
     public boolean saveOverwriteFile(Dir dir, String fn, String cont) {
         // Target dir must exist
-        File targetOsDir = new File(Paths.get(dir.cont));
-        if (!targetOsDir.exists() || !Files.isDirectory(dir)) {
+        Path targetOsPath = Paths.get(dir.cont);
+        File targetOsDir = new File(targetOsPath.toString());
+        if (!targetOsDir.exists() || !Files.isDirectory(targetOsPath)) {
             return false;
         }
         Path targetPath = Paths.get(dir.cont, fn);
-        File targetFile = new File(targetPath);
+        File targetFile = new File(targetPath.toString());
         if (targetFile.exists()) {
             if (targetFile.isDirectory()) {
                 return false;
             }
             targetFile.delete();
         }
-        Files.write(targetPath, cont.getBytes(StandardCharsets.UTF_8));
+        try {
+            Files.write(targetPath, cont.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage());
+        }
         return true;
     }
 
@@ -199,30 +216,37 @@ class BlogFileSys implements FileSys {
     @Override
     public boolean moveFileWithRename(Dir dir, String fn, Dir targetDir, String newName) {
         /// Source file and target dir must exist
-        File sourceFile = new File(Paths.get(dir.cont, fn));
-        if (!sourceFile.exists() || Files.isDirectory(sourceFile)) {
+        Path sourcePath = Paths.get(dir.cont, fn);
+        File sourceFile = new File(sourcePath.toString());
+        if (!sourceFile.exists() || Files.isDirectory(sourcePath)) {
             return false;
         }
-        File targetOsDir = new File(Paths.get(targetDir.cont));
-        if (!targetOsDir.exists() || !Files.isDirectory(targetOsDir)) {
+        Path targetOsPath = Paths.get(targetDir.cont);
+        File targetOsDir = new File(targetOsPath.toString());
+        if (!targetOsDir.exists() || !Files.isDirectory(targetOsPath)) {
             return false;
         }
-        File targetFile = new File(Paths.get(targetDir.cont, newName));
+        Path targetPath = Paths.get(targetDir.cont, newName);
+        File targetFile = new File(targetPath.toString());
         if (targetFile.exists()) {
             if (targetFile.isDirectory()) {
                 return false;
             }
             targetFile.delete();
         }
-        Files.move(sourceFile, targetFile);
+        try {
+            Files.move(sourcePath, targetPath);
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage());
+        }
         return true;
     }
 
     @Override
     public boolean deleteIfExists(Dir dir, String fn) {
         Path thePath = Paths.get(dir.cont, fn);
-        File theFile = new File(thePath);
-        if (!theFile.exists() || Files.isDirectory(theFile)) {
+        File theFile = new File(thePath.toString());
+        if (!theFile.exists() || Files.isDirectory(thePath)) {
             return false;
         }
         theFile.delete();
@@ -233,14 +257,18 @@ class BlogFileSys implements FileSys {
     public boolean deleteDirIfExists(Dir dir) {
         /// Deletes a dir with all its contents and subfolders
         Path thePathToDelete = Paths.get(dir.cont);
-        var theFolder = new File(thePathToDelete);
-        if (!theFolder.exists() || !Files.isDirectory(theFolder)) {
+        var theFolder = new File(dir.cont);
+        if (!theFolder.exists() || !Files.isDirectory(thePathToDelete)) {
             return false;
         }
-        Files.walk(thePathToDelete)
-                .sorted(Comparator.reverseOrder())
-                .map(Path::toFile)
-                .forEach(File::delete);
+        try {
+            Files.walk(thePathToDelete)
+                    .sorted(Comparator.reverseOrder())
+                    .map(Path::toFile)
+                    .forEach(File::delete);
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage());
+        }
         return true;
     }
 }
