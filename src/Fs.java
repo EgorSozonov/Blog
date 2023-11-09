@@ -129,7 +129,10 @@ interface FileSys {
 
 
 
-class BlogFileSys implements FileSys {
+static class BlogFileSys implements FileSys {
+    public BlogFileSys() {
+    }
+
     @Override
     public boolean dirExists(Dir dir) {
         return Files.isDirectory(Paths.get(dir.cont));
@@ -150,12 +153,20 @@ class BlogFileSys implements FileSys {
         /// Immediate but full subfolders of a dir, like `a/b/c`
         L<Subfolder> result = new L();
         String prefixWithSl = dir.cont.endsWith("/") ? dir.cont : dir.cont + "/";
-        try (Stream<Path> paths = Files.walk(Paths.get(dir.cont))) {
-            paths.filter(Files::isDirectory)
-                    .map(x ->
-                        result.add(
-                            new Subfolder(x.toString().substring(prefixWithSl.length()))));
-        } catch (Exception e) {}
+
+        Path thePath = Paths.get(dir.cont);
+        try (Stream<Path> paths = Files.walk(thePath)) {
+            var allPaths = paths.toList();
+            for (Path pt : allPaths) {
+                print(pt.toString().length());
+                if (Files.isDirectory(pt) && pt.toString().length() > prefixWithSl.length()) {
+                    print(pt.toString());
+                    result.add(new Subfolder(pt.toString().substring(prefixWithSl.length())));
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         return result;
     }
 
@@ -272,7 +283,6 @@ class BlogFileSys implements FileSys {
         return true;
     }
 }
-
 
 
 static final class L<T> implements List<T> {
@@ -684,11 +694,7 @@ static final class L<T> implements List<T> {
 
     }
 }
-//{{{ MockFileSys
 
-
-
-//}}}
 //{{{ Utils
 //{{{ Action
 
@@ -735,6 +741,22 @@ static class TestResults {
 
 public static void main(String[] args) {
     print("hw");
+    FileSys fs = new BlogFileSys();
+    var theDir = new Dir("/home/zrx/projects/blog/test");
+    var theSubf = new Subfolder("a");
+    var fullDir = new Dir(theDir, theSubf);
+    print("dirExists = " + fs.dirExists(fullDir));
+    var files = fs.listFiles(fullDir);
+
+    var dirB = new Dir(theDir, new Subfolder("b"));
+
+    print(files.get(0).name);
+    var immediates = fs.listSubfolders(dirB);
+    print("immediate subfolders of `b` " + immediates.size());
+    for (var sf : immediates) {
+        print(sf.cont);
+    }
+
 }
 
 
