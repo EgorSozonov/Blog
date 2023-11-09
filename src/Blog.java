@@ -1358,7 +1358,10 @@ interface FileSys {
 //}}}
 //{{{ FileSys implementation
 
-class BlogFileSys implements FileSys {
+static class BlogFileSys implements FileSys {
+    public BlogFileSys() {
+    }
+
     @Override
     public boolean dirExists(Dir dir) {
         return Files.isDirectory(Paths.get(dir.cont));
@@ -1366,112 +1369,151 @@ class BlogFileSys implements FileSys {
 
     @Override
     public L<FileInfo> listFiles(Dir dir) {
-        return Stream.of(new File(dir).listFiles())
+        var result = new L();
+        var files = Stream.of(new File(dir.cont).listFiles())
                 .filter(file -> !file.isDirectory())
-                .map(x -> new FileInfo(x.getName));
+                .map(x -> new FileInfo(x.getName())).toList();
+        result.addAll(files);
+        return result;
     }
 
     @Override
     public L<Subfolder> listSubfolders(Dir dir) {
-        String dirWithSl = (dir.cont.endsWith("/")) ? dir.cont : (dir.cont + "/");
-        int prefixLength = dirWithSl.length();
+        /// Immediate but full subfolders of a dir, like `a/b/c`
         L<Subfolder> result = new L();
-        for (String key : fs.keySet()) {
-            if (key.startsWith(dirWithSl)) {
-                result.add(new Subfolder(key.substring(prefixLength)));
+        String prefixWithSl = dir.cont.endsWith("/") ? dir.cont : dir.cont + "/";
+
+        Path thePath = Paths.get(dir.cont);
+        try (Stream<Path> paths = Files.walk(thePath)) {
+            var allPaths = paths.toList();
+            for (Path pt : allPaths) {
+                if (Files.isDirectory(pt) && pt.toString().length() > prefixWithSl.length()) {
+                    print(pt.toString());
+                    result.add(new Subfolder(pt.toString().substring(prefixWithSl.length())));
+                }
             }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
         return result;
     }
 
     @Override
-    public L<Subfolder> listSubfoldersContaining(Dir dir, String fN) {
-        /// Gets the list of directories containing a filename, for example "i.html"
-        String dirWithSl = (dir.cont.endsWith("/")) ? dir.cont : (dir.cont + "/");
-        int prefixLength = dirWithSl.length();
-        L<Subfolder> result = new L(10);
-        for (var e : fs.entrySet()) {
-            if (e.getKey().startsWith(dirWithSl)
-                    && e.getValue().any(x -> x.name.equals("i.html"))) {
-                result.add(new Subfolder(e.getKey().substring(prefixLength)));
+    public L<Subfolder> listSubfoldersContaining(Dir dir, String fn) {
+        /// Gets the list of subfolders containing a filename, for example "i.html"
+        L<Subfolder> result = new L();
+        String prefixWithSl = dir.cont.endsWith("/") ? dir.cont : dir.cont + "/";
+        try (Stream<Path> paths = Files.walk(Paths.get(dir.cont))) {
+            var allPaths = paths.toList();
+            for (Path pt : allPaths) {
+                if (Files.isDirectory(pt)
+                        && pt.toString().length() > prefixWithSl.length()
+                        && (new File(Paths.get(pt.toString(), fn).toString())).exists()) {
+                    result.add(new Subfolder(pt.toString().substring(prefixWithSl.length())));
+                }
             }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
         return result;
     }
 
     @Override
-    public String readTextFile(Dir dir, String fN) {
-        if (!fs.containsKey(dir.cont)) {
+    public String readTextFile(Dir dir, String fn) {
+        Path thePath = Paths.get(dir.cont, fn);
+        File theFile = new File(thePath.toString());
+        if (!theFile.exists()) {
             return "";
         }
-        return fs.get(dir.cont).first(x -> x.name.equals(fN)).map(x -> x.cont).orElse("");
+        try {
+            return Files.readString(thePath);
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage());
+        }
     }
 
     @Override
-    public boolean saveOverwriteFile(Dir dir, String fN, String cont) {
-        var newFile = new MockFile(fN, cont, Instant.now());
-        if (fs.containsKey(dir.cont)) {
-            var existingFiles = fs.get(dir.cont);
-            var indexExisting = existingFiles.findIndex(x -> x.name.equals(fN));
-            if (indexExisting == -1) {
-                existingFiles.add(newFile);
-            } else {
-                existingFiles.set(indexExisting, newFile);
-            }
-        } else {
-            fs.put(dir.cont, L.of(newFile));
-        }
-        return true;
-    }
-
-
-    @Override
-    public boolean moveFileWithRename(Dir dir, String fN, Dir targetDir, String newName) {
-        var sourceFiles = fs.get(dir.cont);
-        int indexSource = sourceFiles.findIndex(x -> x.name.equals(fN));
-        MockFile theFile = sourceFiles.get(indexSource);
-        theFile.name = newName;
-        L<MockFile> targetFiles = fs.get(targetDir.cont);
-        sourceFiles.remove(indexSource);
-        if (targetFiles == null) {
-            fs.put(targetDir.cont, L.of(theFile));
-            return true;
-        }
-
-        var existingInd = targetFiles.indexOf(newName);
-        if (existingInd < 0) {
-            targetFiles.add(theFile);
-        } else {
-            targetFiles.set(existingInd, theFile);
-        }
-
-        return true;
-    }
-
-    @Override
-    public boolean deleteIfExists(Dir dir, String fN) {
-        if (!fs.containsKey(dir.cont)) {
+    public boolean saveOverwriteFile(Dir dir, String fn, String cont) {
+        // Target dir must exist
+        Path targetOsPath = Paths.get(dir.cont);
+        File targetOsDir = new File(targetOsPath.toString());
+        if (!targetOsDir.exists() || !Files.isDirectory(targetOsPath)) {
             return false;
         }
-        var existingFiles = fs.get(dir.cont);
-        int indexExisting = existingFiles.findIndex(x -> x.name.equals(fN));
-        if (indexExisting > -1) {
-            existingFiles.remove(indexExisting);
-            return true;
+        Path targetPath = Paths.get(dir.cont, fn);
+        File targetFile = new File(targetPath.toString());
+        if (targetFile.exists()) {
+            if (targetFile.isDirectory()) {
+                return false;
+            }
+            targetFile.delete();
         }
-        return false;
+        try {
+            Files.write(targetPath, cont.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage());
+        }
+        return true;
+    }
+
+
+    @Override
+    public boolean moveFileWithRename(Dir dir, String fn, Dir targetDir, String newName) {
+        /// Source file and target dir must exist
+        Path sourcePath = Paths.get(dir.cont, fn);
+        File sourceFile = new File(sourcePath.toString());
+        if (!sourceFile.exists() || Files.isDirectory(sourcePath)) {
+            return false;
+        }
+        Path targetOsPath = Paths.get(targetDir.cont);
+        File targetOsDir = new File(targetOsPath.toString());
+        if (!targetOsDir.exists() || !Files.isDirectory(targetOsPath)) {
+            return false;
+        }
+        Path targetPath = Paths.get(targetDir.cont, newName);
+        File targetFile = new File(targetPath.toString());
+        if (targetFile.exists()) {
+            if (targetFile.isDirectory()) {
+                return false;
+            }
+            targetFile.delete();
+        }
+        try {
+            Files.move(sourcePath, targetPath);
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage());
+        }
+        return true;
+    }
+
+    @Override
+    public boolean deleteIfExists(Dir dir, String fn) {
+        Path thePath = Paths.get(dir.cont, fn);
+        File theFile = new File(thePath.toString());
+        if (!theFile.exists() || Files.isDirectory(thePath)) {
+            return false;
+        }
+        theFile.delete();
+        return true;
     }
 
     @Override
     public boolean deleteDirIfExists(Dir dir) {
         /// Deletes a dir with all its contents and subfolders
-        for (String dirName : fs.keySet()) {
-            if (dirName.startsWith(dir.cont)) {
-                fs.remove(dirName);
-                return true;
-            }
+        Path thePathToDelete = Paths.get(dir.cont);
+        var theFolder = new File(dir.cont);
+        if (!theFolder.exists() || !Files.isDirectory(thePathToDelete)) {
+            return false;
         }
-        return false;
+        try {
+            Files.walk(thePathToDelete)
+                    .sorted(Comparator.reverseOrder())
+                    .map(Path::toFile)
+                    .forEach(File::delete);
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage());
+        }
+        return true;
     }
 }
 

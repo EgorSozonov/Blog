@@ -158,7 +158,6 @@ static class BlogFileSys implements FileSys {
         try (Stream<Path> paths = Files.walk(thePath)) {
             var allPaths = paths.toList();
             for (Path pt : allPaths) {
-                print(pt.toString().length());
                 if (Files.isDirectory(pt) && pt.toString().length() > prefixWithSl.length()) {
                     print(pt.toString());
                     result.add(new Subfolder(pt.toString().substring(prefixWithSl.length())));
@@ -172,16 +171,21 @@ static class BlogFileSys implements FileSys {
 
     @Override
     public L<Subfolder> listSubfoldersContaining(Dir dir, String fn) {
-        /// Gets the list of directories containing a filename, for example "i.html"
+        /// Gets the list of subfolders containing a filename, for example "i.html"
         L<Subfolder> result = new L();
         String prefixWithSl = dir.cont.endsWith("/") ? dir.cont : dir.cont + "/";
         try (Stream<Path> paths = Files.walk(Paths.get(dir.cont))) {
-            paths.filter(x -> Files.isDirectory(x)
-                            && (new File(Paths.get(x.toString(), fn).toString())).exists())
-                    .map(x ->
-                            result.add(
-                                    new Subfolder(x.toString().substring(prefixWithSl.length()))));
-        } catch (Exception e) {}
+            var allPaths = paths.toList();
+            for (Path pt : allPaths) {
+                if (Files.isDirectory(pt)
+                        && pt.toString().length() > prefixWithSl.length()
+                        && (new File(Paths.get(pt.toString(), fn).toString())).exists()) {
+                    result.add(new Subfolder(pt.toString().substring(prefixWithSl.length())));
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
         return result;
     }
 
@@ -744,22 +748,32 @@ public static void main(String[] args) {
     FileSys fs = new BlogFileSys();
     var theDir = new Dir("/home/zrx/projects/blog/test");
     var theSubf = new Subfolder("a");
-    var fullDir = new Dir(theDir, theSubf);
-    print("dirExists = " + fs.dirExists(fullDir));
-    var files = fs.listFiles(fullDir);
+    var aDir = new Dir(theDir, theSubf);
+    print("dirExists = " + fs.dirExists(aDir));
+    var files = fs.listFiles(aDir);
 
-    var dirB = new Dir(theDir, new Subfolder("b"));
+    var bDir = new Dir(theDir, new Subfolder("b"));
 
     print(files.get(0).name);
-    var immediates = fs.listSubfolders(dirB);
+    var immediates = fs.listSubfolders(bDir);
     print("immediate subfolders of `b` " + immediates.size());
     for (var sf : immediates) {
         print(sf.cont);
     }
 
+    var containing = fs.listSubfoldersContaining(bDir, "ff.txt");
+    print("contaning `ff.txt` subfolders of `b` " + containing.size());
+    for (var sf : containing) {
+        print(sf.cont);
+    }
+
+    var cDir = new Dir(bDir, new Subfolder("c"));
+
+    fs.moveFileWithRename(aDir, "b.txt", cDir, "c.txt");
+    print(fs.readTextFile(cDir, "c.txt"));
+
+    fs.deleteDirIfExists(new Dir(bDir, new Subfolder("e")));
 }
-
-
 
 //}}}
 
