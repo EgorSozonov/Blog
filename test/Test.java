@@ -474,6 +474,7 @@ static void updateDoc() {
     L<FileInfo> result = fs.listFiles(pathExistingDoc);
     String cont = fs.readTextFile(pathExistingDoc, "i.html");
     print("content:");
+    print("");
     print(cont);
     blAssert(cont.equals(expectedContent));
 }

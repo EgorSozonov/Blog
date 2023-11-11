@@ -39,7 +39,7 @@ static final Dir ingestDir = new Dir(webRoot, new Subfolder("blogIngest"));
 
 static final String appSuburl = "blog/"; // The URL prefix
 static final String contentStartMarker = "<div id=\"_content\">\n";
-static final String contentEndMarker = "<!-- _contentEnd -->";
+static final String contentEndMarker = "<!-- _contentEnd -->\n";
 
 // All fixed core files must be unique even without the file extension
 static final String[] fixedCoreFiles =
@@ -231,20 +231,18 @@ String buildDocument(CreateUpdate createUpdate, String old, String updatedDt, In
         createdDt = parseCreatedDate(content);
     }
     String dateStamp = buildDateStamp(createdDt, updatedDt);
-    print("extracted content");
-    print(content);
     String localScriptName =
             parseHead(mainSource, new Dir(blogDir, createUpdate.targetDir), globalScripts);
     L<Substitution> subs = parseBodySubstitutions(content, dateStamp);
 
     var result = new StringBuilder();
-    buildHead(localScriptName, globalScripts, ing, result);
+    buildHead(localScriptName, globalScripts, createUpdate.targetDir, ing, result);
     buildBody(content, subs, result);
     return result.toString();
 }
 
 
-void buildHead(String localScriptName, L<String> globalScripts, Ingestion ing,
+void buildHead(String localScriptName, L<String> globalScripts, Subfolder subf, Ingestion ing,
                StringBuilder result) {
     result.append(templateHtmlStart);
     result.append("    <script type=\"text/javascript\" src=\"/blog/script.js\"></script>\n");
@@ -258,9 +256,22 @@ void buildHead(String localScriptName, L<String> globalScripts, Ingestion ing,
         result.append("    <script type=\"text/javascript\" src=\"" + localScriptName
                 + "\"></script>\n");
     }
-    result.append("    <link rel=\"stylesheet\" href=\"/blog/style.css\" />");
-    result.append(ing.navPart);
+    result.append("    <link rel=\"stylesheet\" href=\"/blog/style.css\" />\n");
+    buildNavPart(ing.navPart, subf, result);
     result.append("\n</head>\n");
+}
+
+void buildNavPart(String navTree, Subfolder subf, StringBuilder result) {
+    result.append("""
+        <script type="application/json" id="_navState">{
+            address:""");
+    result.append(" \"");
+    result.append(subf.cont);
+    result.append("\",\n");
+    result.append("    nav: [\n");
+    result.append(navTree);
+    result.append("\n    ]\n");
+    result.append("}</script>");
 }
 
 
@@ -294,8 +305,6 @@ static void buildBody(String content, L<Substitution> subs, StringBuilder result
 static void buildContent(String content, L<Substitution> subs, StringBuilder result) {
     int curr = 0;
     for (var sub : subs) {
-        print("curr = " + curr + ", startByte = " + sub.startByte);
-        print("sub text = " + sub.text);
         result.append(content.substring(curr, sub.startByte));
         result.append(sub.text);
         curr = sub.endByte;
@@ -504,6 +513,7 @@ static class Ingestion {
 
     public void finalize() {
         this.nav = buildThematic();
+        this.navPart = this.nav.toJson();
     }
 
     private NavTree buildThematic() {
@@ -603,20 +613,13 @@ static class NavTree {
         this.currInd = 0;
     }
 
-    String toJson(Subfolder subf) {
+    String toJson() {
         var st = new L<NavTree>();
         if (this.children.size() == 0) {
             return "";
         }
 
         var result = new StringBuilder(100);
-        result.append("""
-        <script type="application/json" id="_navState">{
-           address: "
-""");
-        result.append(subf.cont);
-        result.append(",\n");
-        result.append("    nav: [\n");
         st.add(this);
         while (st.nonEmpty()) {
             var top = st.last();
@@ -651,8 +654,6 @@ static class NavTree {
             }
             ++top.currInd;
         }
-        result.append("]\n");
-        result.append("}</script>");
         return result.toString();
     }
 }
@@ -734,9 +735,9 @@ static final String templateBodyStart = """
 
 
 static final String templateEnd = """
-    <div class="_footer">© Egor Sozonov | <a href="https://sozonov.site">Home</a> |
-        <a href="/blog/TermsOfUse">Terms of use</a>
-    </div>
+<div class="_footer">© Egor Sozonov | <a href="https://sozonov.site">Home</a> |
+    <a href="/blog/TermsOfUse">Terms of use</a>
+</div>
 </div>
 </div>
 </body>
