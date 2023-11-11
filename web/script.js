@@ -1,71 +1,55 @@
-const homePath = "/blog/";
+const homePath = `/blog/`;
 let cLoc = []
-let modeTemp = false
 let nav = []
-let navTemporal = []
-let navThematic = []
+let cAddress = ``
 
 function toggleNavBar() {
-    const divider = document.getElementById("_divider")
-    if (!divider.classList.contains("__hidden")) {
+    const divider = document.getElementById(`_divider`)
+    if (!divider.classList.contains(`_hidden`)) {
         hideNavBar()
     } else {
-        const divider = document.getElementById("_divider")
-        const nBar = document.getElementById("_theNavBar")
-        nBar.classList.remove("__hidden")
-        nBar.classList.remove("__unopaque")
-        nBar.classList.add("__opaque")
+        const divider = document.getElementById(`_divider`)
+        const nBar = document.getElementById(`_theNavBar`)
+        nBar.classList.remove(`_hidden`)
+        nBar.classList.remove(`_unopaque`)
+        nBar.classList.add(`_opaque`)
         void nBar.offsetWidth
-        document.getElementById("_divider").classList.remove("__hidden")
+        document.getElementById(`_divider`).classList.remove(`_hidden`)
 
-        const toggler = document.getElementById("_menuToggler")
-        toggler.classList.add("__hidden")
+        const toggler = document.getElementById(`_menuToggler`)
+        toggler.classList.add(`_hidden`)
 
     }
 }
 
 function hideNavBar() {
-    const nBar = document.getElementById("_theNavBar")
-    nBar.classList.remove("__opaque")
-    nBar.classList.add("__unopaque")
+    const nBar = document.getElementById(`_theNavBar`)
+    nBar.classList.remove(`_opaque`)
+    nBar.classList.add(`_unopaque`)
     void nBar.offsetWidth
-    nBar.classList.add("__hidden")
+    nBar.classList.add(`_hidden`)
 
-    const toggler = document.getElementById("_menuToggler")
-    toggler.classList.remove("__hidden")
+    const toggler = document.getElementById(`_menuToggler`)
+    toggler.classList.remove(`_hidden`)
 
-    document.getElementById("_divider").classList.add("__hidden")
+    document.getElementById(`_divider`).classList.add(`_hidden`)
 }
 
 function populateMenu(isFirstLoad) {
     if (isFirstLoad === true) {
-        const navStateContainer = document.getElementById("_navState")
+        const navStateContainer = document.getElementById(`_navState`)
         const navState = JSON.parse(navStateContainer.textContent)
-        cLoc = navState.cLoc
-        navThematic = navState.navThematic
-        navTemporal = navState.navTemporal
-        modeTemp = navState.modeTemp
-        if (!nav || !cLoc ) return
+        nav = navState.nav
+        cAddress = navState.address
+        if (!nav) return
+        cLoc = makeBreadcrumbs(nav, cAddress) 
 
-        if (window.matchMedia("only screen and (max-width: 800px)").matches) {
+        if (window.matchMedia(`only screen and (max-width: 800px)`).matches) {
             hideNavBar()
         }
     }
 
-
-    if (modeTemp === true) {
-        nav = navTemporal
-        document.getElementById("_sorterTemp").classList.add("__sortingBorder")
-        const sorterOther = document.getElementById("_sorterThem")
-        if (sorterOther.classList.contains("__sortingBorder")) sorterOther.classList.remove("__sortingBorder")
-    } else {
-        nav = navThematic
-        document.getElementById("_sorterThem").classList.add("__sortingBorder")
-        const sorterOther = document.getElementById("_sorterTemp")
-        if (sorterOther.classList.contains("__sortingBorder")) sorterOther.classList.remove("__sortingBorder")
-    }
-
-    let cont = document.getElementById("__theMenu")
+    let cont = document.getElementById(`_theMenu`)
     cont.textContent = ''
     let subAddress = homePath
     let cNode = [[], nav]
@@ -97,7 +81,7 @@ function populateMenu(isFirstLoad) {
         const linkUp = document.createElement('a')
         linkUp.setAttribute('href', '#')
         linkUp.addEventListener('click', () => moveUp((leafMode === true ? 2 : 1)))
-        linkUp.innerHTML = "^ " + nameUp
+        linkUp.innerHTML = `^ ` + nameUp
         divUp.appendChild(linkUp)
         cont.appendChild(divUp)
     }
@@ -108,7 +92,7 @@ function populateMenu(isFirstLoad) {
         if (listOpen[i][1].length == 0) {
             if (i == indLast && leafMode === true) {
                 let child = document.createElement('div')
-                child.style.border = "1px solid hsl(75, 100%, 50%)"
+                child.style.border = `1px solid hsl(75, 100%, 50%)`
                 const displayedName = displayLeaf(listOpen[i][0])
                 let par = document.createElement('p')
                 par.innerHTML = displayedName
@@ -117,17 +101,36 @@ function populateMenu(isFirstLoad) {
             } else {
                 link.setAttribute('href', '#')
                 link.addEventListener('click', () => goToPage(homePath + listOpen[i][0] + (modeTemp ?
-                "?temp" : "")))
+                `?temp` : ``)))
                 link.innerHTML = displayLeaf(listOpen[i][0])
             }
         } else {
             link.setAttribute('href', '#')
             link.addEventListener('click', () => (leafMode === true ? strafe(i) : moveDown(i)))
-            link.innerHTML = "[" + listOpen[i][0] + "]"
+            link.innerHTML = `[` + listOpen[i][0] + `]`
         }
         cParent.appendChild(link)
         cont.appendChild(cParent)
     }
+}
+
+function makeBreadcrumbs(navTree, cAddress) {
+    const spl = cAddress.split(`/`)
+    const result = []
+    if (navTree[0] !== `` || navTree[1].length === 0) {
+        return result
+    }
+    var curr = navTree[1]
+    for (let i = 0; i < spl.length; i++)  {
+        result.push(curr.indexOf(x => x[0] === spl[i]))
+        curr = curr[result[i]][1]
+    }
+    let leafIndex = curr.indexOf(x => x[0] === cAddress)
+    if (leafIndex < 0) {
+        return []
+    }
+    result.push(leafIndex)
+    return result
 }
 
 function goToPage(path) {
@@ -135,17 +138,17 @@ function goToPage(path) {
 }
 
 function displayLeaf(leafStr) {
-    const splitPath = leafStr.split("/");
+    const splitPath = leafStr.split(`/`);
     const pageName = splitPath[splitPath.length - 1];
     const arrCapitals = [];
     for (let i = 0; i < pageName.length; ++i) {
         if (pageName[i] !== pageName[i].toLowerCase()) arrCapitals.push(i);
     }
-    let result = "";
+    let result = ``;
     if (arrCapitals.length > 0) {
         result = arrCapitals[0] > 0 ? (pageName.substring(0, 1).toUpperCase() +
-                                       pageName.substring(1, arrCapitals[0]) + " ")
-                                    : "";
+                                       pageName.substring(1, arrCapitals[0]) + ` `)
+                                    : ``;
         for (let j = 1; j < arrCapitals.length; ++j) {
             result = result + pageName.substring(arrCapitals[j - 1], arrCapitals[j]) + ' ';
         }
@@ -194,37 +197,37 @@ function clearLocation() {
 
 
 function showLogin() {
-    let loginForm = document.getElementById("__loginDiv");
-    let showButton = document.getElementById("__loginShow");
-    let hideButton = document.getElementById("__loginHide");
-    loginForm.style.display = 'block';
-    showButton.style.display = 'none';
-    hideButton.style.display = 'inline';
+    let loginForm = document.getElementById(`_loginDiv`);
+    let showButton = document.getElementById(`_loginShow`);
+    let hideButton = document.getElementById(`_loginHide`);
+    loginForm.style.display = `block`;
+    showButton.style.display = `none`;
+    hideButton.style.display = `inline`;
 }
 
 
 function hideLogin() {
-    let loginForm = document.getElementById("__loginDiv");
-    let showButton = document.getElementById("__loginShow");
-    let hideButton = document.getElementById("__loginHide");
+    let loginForm = document.getElementById(`_loginDiv`);
+    let showButton = document.getElementById(`_loginShow`);
+    let hideButton = document.getElementById(`_loginHide`);
 
-    loginForm.style.display = 'none';
-    showButton.style.display = 'inline';
-    hideButton.style.display = 'none';
+    loginForm.style.display = `none`;
+    showButton.style.display = `inline`;
+    hideButton.style.display = `none`;
 }
 
 
 function tryLogin() {
-    let userLogin = document.getElementById("__loginInput").value;
-    let userPw = document.getElementById("__loginPwInput").value;
+    let userLogin = document.getElementById(`_loginInput`).value;
+    let userPw = document.getElementById(`_loginPwInput`).value;
 }
 
 
-document.addEventListener("DOMContentLoaded", () => {
-    document.getElementById("_divider").addEventListener("click", toggleNavBar)
-    document.getElementById("_reorderTemporal").addEventListener("click", reorderTemporal)
-    document.getElementById("_reorderThematic").addEventListener("click", reorderThematic)
-    document.getElementById("_menuToggler").addEventListener("click", toggleNavBar)
+document.addEventListener(`DOMContentLoaded`, () => {
+    document.getElementById(`_divider`).addEventListener(`click`, toggleNavBar)
+    document.getElementById(`_reorderTemporal`).addEventListener(`click`, reorderTemporal)
+    document.getElementById(`_reorderThematic`).addEventListener(`click`, reorderThematic)
+    document.getElementById(`_menuToggler`).addEventListener(`click`, toggleNavBar)
 
     populateMenu(true)
 });

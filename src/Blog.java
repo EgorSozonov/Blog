@@ -22,8 +22,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
-//import static tech.sozonov.blog.Utils.*;
-//import tech.sozonov.blog.Utils.Tu;
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.util.Comparator;
+import java.util.stream.Stream;
 
 //}}}
 
@@ -601,27 +603,6 @@ static class NavTree {
         this.currInd = 0;
     }
 
-    L<Integer> createBreadcrumbs(Subfolder subf) {
-        /// Make breadcrumbs that trace the way to this file from the root.
-        if (this.name.length() > 0 || this.children.size() == 0) {
-            return new L();
-        }
-        var spl = subf.cont.split("/");
-        L<Integer> result = new L(spl.length);
-        var curr = this.children;
-        for (int i = 0; i < spl.length; i++) {
-            final String nm = spl[i];
-            result.add(curr.findIndex(x -> x.name.equals(nm)));
-            curr = curr.get(result.get(i)).children;
-        }
-        int leafIndex = curr.findIndex(x -> x.name.equals(subf.cont));
-        if (leafIndex < 0) {
-            return new L();
-        }
-        result.set(spl.length - 1, leafIndex);
-        return result;
-    }
-
     String toJson(Subfolder subf) {
         var st = new L<NavTree>();
         if (this.children.size() == 0) {
@@ -631,9 +612,10 @@ static class NavTree {
         var result = new StringBuilder(100);
         result.append("""
         <script type="application/json" id="_navState">{
-           cLoc: [""");
-        writeCommaSeparatedToBuffer(createBreadcrumbs(subf), result);
-        result.append("],\n");
+           address: "
+""");
+        result.append(subf.cont);
+        result.append(",\n");
         result.append("    nav: [\n");
         st.add(this);
         while (st.nonEmpty()) {

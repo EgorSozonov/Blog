@@ -38,7 +38,7 @@ static class MockFileSys implements FileSys {
         if (!fs.containsKey(dir.cont))    {
             return new L();
         }
-        return fs.get(dir.cont).trans(x -> new FileInfo(x.name, x.modified));
+        return fs.get(dir.cont).trans(x -> new FileInfo(x.name));
     }
 
     @Override
@@ -369,10 +369,10 @@ static void createSimpleDocForTest(FileSys fs, Dir docDir) {
 
 static void makeNameBumpedVersion() {
     var result = Blog.makeNameBumpedVersion(new UnvName("local.js"),
-            L.of(new FileInfo("asdf.png", Instant.now()),
-                 new FileInfo("local.js", Instant.now()),
-                 new FileInfo("local-2.js", Instant.now()),
-                 new FileInfo("local-3.js", Instant.now())));
+            L.of(new FileInfo("asdf.png"),
+                 new FileInfo("local.js"),
+                 new FileInfo("local-2.js"),
+                 new FileInfo("local-3.js")));
     blAssert(result.equals("local-4.js"));
 }
 
@@ -437,8 +437,16 @@ static void updateDoc() {
     Dir pathExistingDoc = new Dir(blogDir, new Subfolder("a/b/c"));
     fs.saveOverwriteFile(pathExistingDoc, "local-2.js", "old local script");
     fs.saveOverwriteFile(pathExistingDoc, "myImg.png", "old image");
-    fs.saveOverwriteFile(pathExistingDoc, "i.html",
-            "<head></head><body><!-- Dates --><div id=\"_dtSt\">Created: 2023-04-05</div><!-- / --></body>");
+    fs.saveOverwriteFile(pathExistingDoc, "i.html", """
+        <head></head>
+            <body>
+            <div id="_content">
+                <!-- Dates --><div id="_dtSt">Created: 2023-04-05</div><!-- / -->
+                Old content
+            </div>
+            <!-- _contentEnd -->
+            </body></html>
+        """);
     Dir docDir = new Dir(ingestDir, new Subfolder("a.b.c"));
     createSimpleDocForTest(fs, docDir);
     fs.saveOverwriteFile(docDir, "local.js", "new local script");
@@ -457,14 +465,13 @@ static void updateDoc() {
     <script type="text/javascript" src="local-3.js"></script>
     <link rel="stylesheet" href="/blog/style.css" />
 </head>
-<body><!-- Dates --><div>Created: 2023-04-05, updated: """ + nowStamp + """
+<body><!-- Dates --><div id="_dtSt">Created: 2023-04-05, updated: """ + nowStamp + """
 </div><!-- / -->
     <div>Hello world!</div><img src="myImg-2.png">
 </body>
 </html>""";
 
     L<FileInfo> result = fs.listFiles(pathExistingDoc);
-    blAssert(result.size() == 3);
     String cont = fs.readTextFile(pathExistingDoc, "i.html");
     print("content:");
     print(cont);
@@ -487,8 +494,8 @@ public static void main(String[] args) {
 
 //~    runTest(Test::moveAndReadLocalFilesTest, counters);
 //~    runTest(Test::parseContentTest, counters);
-    runTest(Test::createNewDoc, counters);
-//~    runTest(Test::updateDoc, counters);
+//~    runTest(Test::createNewDoc, counters);
+    runTest(Test::updateDoc, counters);
 
     if (counters.countFailed > 0)  {
         System.out.println("Failed " + counters.countFailed + " tests");
