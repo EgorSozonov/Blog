@@ -170,14 +170,17 @@ Ingestion buildIngestion() {
 
 
 LocalFiles moveAndReadLocalFiles(L<FileInfo> inFiles, Dir inSourceDir, Dir inTargetDir) {
-    /// Determines the new filenames for all local files of a document (the script if any,
-    /// and the media files) except of course the `i.html`
+    /// Moves all local files (except of cource the `i.html`) to target dir and determines
+    /// their new filenames
     LocalFiles result = new LocalFiles();
     Map<UnvName, Tu<Integer, L<String>>> versions = new HashMap();
     // fn -> (maxEncounteredVersion deleteList)
 
     var existingFiles = fs.listFiles(inTargetDir);
     for (var fInfo : inFiles) {
+        if (fInfo.name.equals("i.html")) {
+            continue;
+        }
         UnvName fn = new UnvName(fInfo.name);
         String newVersion = makeNameBumpedVersion(fn, existingFiles);
         fs.moveFileWithRename(inSourceDir, fInfo.name, inTargetDir, newVersion);
@@ -220,7 +223,7 @@ String buildDocument(CreateUpdate createUpdate, String old, String updatedDt, In
         mainSource = old;
         isOld = true;
     }
-
+    print("isOld = " + isOld);
     L<String> globalScripts = new L();
 
     String content = extractContent(mainSource, isOld);
@@ -228,12 +231,12 @@ String buildDocument(CreateUpdate createUpdate, String old, String updatedDt, In
     if (old == "") {
         createdDt = updatedDt;
     } else {
-        createdDt = parseCreatedDate(content);
+        createdDt = parseCreatedDate(old);
     }
     String dateStamp = buildDateStamp(createdDt, updatedDt);
     String localScriptName =
             parseHead(mainSource, new Dir(blogDir, createUpdate.targetDir), globalScripts);
-    L<Substitution> subs = parseBodySubstitutions(content, dateStamp);
+    L<Substitution> subs = parseBodySubstitutions(content, dateStamp, createUpdate.localFiles);
 
     var result = new StringBuilder();
     buildHead(localScriptName, globalScripts, createUpdate.targetDir, ing, result);
@@ -282,9 +285,6 @@ static String extractContent(String html, boolean isOld) {
     int indEnd;
     if (isOld) {
         indStart = html.indexOf(contentStartMarker) + contentStartMarker.length();
-        print("html");
-        print(html);
-        print(indStart);
         indEnd = html.indexOf(contentEndMarker);
     } else {
         indStart = html.indexOf("<body>") + 6;
@@ -348,7 +348,8 @@ String parseHead(String old, Dir targetDir, /* out */ L<String> globalCoreScript
 }
 
 
-static L<Substitution> parseBodySubstitutions(String body, String dateStamp) {
+static L<Substitution> parseBodySubstitutions(String body, String dateStamp,
+                                              LocalFiles localFiles) {
     /// Produces a list of substitutions sorted by start byte.
     L<Substitution> result = new L();
     int start = 0; // 6 to skip the `<body>`
@@ -361,7 +362,10 @@ static L<Substitution> parseBodySubstitutions(String body, String dateStamp) {
         int indStampClose = body.indexOf(stampClose);
         result.add(new Substitution(indStampOpen, indStampClose + stampClose.length(), dateStamp));
     }
-    result.append(parseSrcAttribs(body, "img"));
+    var existingAttribs = parseSrcAttribs(body, "img");
+    result.append(existingAttribs.trans(x ->
+            new Substitution(x.startByte, x.endByte,
+                    localFiles.versions.get(new UnvName(x.text)))));
     return result;
 }
 
@@ -398,6 +402,8 @@ static String parseCreatedDate(String old) {
 void createUpdateDocs(Ingestion ing, boolean isUpdate) {
     L<CreateUpdate> cus = (isUpdate) ? ing.updateDocs : ing.createDocs;
     for (CreateUpdate cu : cus) {
+        print("isUpdate = " + isUpdate);
+        print(cu.newContent);
         Dir targetDir = new Dir(blogDir, cu.targetDir);
 
         String oldContent = isUpdate ? fs.readTextFile(targetDir, "i.html") : "";

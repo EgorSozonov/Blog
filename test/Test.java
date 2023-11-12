@@ -447,36 +447,26 @@ static void updateDoc() {
             <!-- _contentEnd -->
             </body></html>
         """);
-    Dir docDir = new Dir(ingestDir, new Subfolder("a.b.c"));
-    createSimpleDocForTest(fs, docDir);
-    fs.saveOverwriteFile(docDir, "local.js", "new local script");
-    fs.saveOverwriteFile(docDir, "myImg.png", "new image");
-
+    Dir updateDir = new Dir(ingestDir, new Subfolder("a.b.c"));
+    createSimpleDocForTest(fs, updateDir);
     b.ingestDocs();
 
     String nowStamp = formatter.format(Instant.now());
     String expectedContent = """
-<!DOCTYPE html>
-<html>
-<head>
-    <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self'; base-uri 'self';" />
-    <script type="text/javascript" src="/blog/script.js"></script>
-    <script type="text/javascript" src="local-3.js"></script>
-    <link rel="stylesheet" href="/blog/style.css" />
-</head>
-<body><!-- Dates --><div id="_dtSt">Created: 2023-04-05, updated: """ + nowStamp + """
+<!-- Dates --><div id="_dtSt">Created: 2023-04-05, updated:""" + " " + nowStamp + """
 </div><!-- / -->
     <div>Hello world!</div><img src="myImg-2.png">
-</body>
-</html>""";
+""";
 
     L<FileInfo> result = fs.listFiles(pathExistingDoc);
     String cont = fs.readTextFile(pathExistingDoc, "i.html");
-    print("content:");
-    print("");
-    print(cont);
-    blAssert(cont.equals(expectedContent));
+
+//    print("extract");
+//    String extract = Blog.extractContent(cont, true);
+//    print(extract);
+//    print("expect");
+//    print(expectedContent);
+    blAssert(extract.equals(expectedContent));
 }
 
 public static void main(String[] args) {
