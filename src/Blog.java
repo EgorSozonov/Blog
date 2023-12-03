@@ -1363,7 +1363,11 @@ static class BlogFileSys implements FileSys {
     @Override
     public L<FileInfo> listFiles(Dir dir) {
         var result = new L();
-        var files = Stream.of(new File(dir.cont).listFiles())
+        var files0 = new File(dir.cont).listFiles(); 
+        if (files0 == null) {
+            return result;
+        }
+        var files = Stream.of(files0)
                 .filter(file -> !file.isDirectory())
                 .map(x -> new FileInfo(x.getName())).toList();
         result.addAll(files);
