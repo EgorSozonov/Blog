@@ -69,6 +69,11 @@ public Blog(FileSys fs)  {
     todayDt = formatter.format(Instant.now());
 }
 
+void run() {
+    ingestCore();
+    ingestDocs();
+}
+
 void ingestCore() {
     /// Ingest the core files
     if (!fs.dirExists(ingestDir))  {
@@ -681,7 +686,6 @@ record Substitution(int startByte, int endByte, String text) {}
 
 
 //}}}
-
 //{{{ Templates
 
 static final String templateHtmlStart = """
@@ -1507,5 +1511,13 @@ static class BlogFileSys implements FileSys {
 }
 
 //}}}
+//}}}
+//{{{ Main
+
+public static void main(String[] args) {
+    Blog blog = new Blog(new BlogFileSys());
+    blog.run();
+}
+
 //}}}
 }

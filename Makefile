@@ -28,7 +28,8 @@ binFolder:
 / mkdir -p $(BUILDDIR)
 
 build: | binFolder ## Build the project
-/ javac -d $(BUILDDIR) src/Blog.java src/Utils.java
+/ javac -d $(BUILDDIR) src/Blog.java
+/ jar -c -f $(BUILDDIR)/blog.jar -e tech.sozonov.blog.Blog -C $(BUILDDIR) tech/sozonov/blog
 
 clean: ## Delete cached build results
 / rm -rf _bin
@@ -37,7 +38,7 @@ _bin/test: | _bin
 / mkdir -p _bin/test
 
 test: ## Run unit tests
-/ echo 'testing'
+/ echo 'testing...'
 / javac -d '$(TESTDIR)' src/Blog.java test/Test.java
 / jar -c -f $(TESTDIR)/test.jar -e tech.sozonov.blog.Test -C $(TESTDIR) tech/sozonov/blog
 / java -jar $(TESTDIR)/test.jar
