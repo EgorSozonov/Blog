@@ -23,6 +23,7 @@ import java.nio.file.Paths;
 import java.nio.file.Files;
 import java.time.format.DateTimeFormatter;
 import java.io.File;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.stream.Stream;
@@ -1315,6 +1316,7 @@ static class UnvName {
 }
 
 //}}}
+//}}}
 //{{{ Filesys
 
 static class FileInfo {
@@ -1397,7 +1399,7 @@ static class BlogFileSys implements FileSys {
 
     @Override
     public L<Subfolder> listSubfoldersContaining(Dir dir, String fn) {
-        /// Gets the list of subfolders containing a filename, for example "i.html"
+        //! Gets the list of subfolders containing a filename, for example "i.html"
         L<Subfolder> result = new L();
         String prefixWithSl = dir.cont.endsWith("/") ? dir.cont : dir.cont + "/";
         try (Stream<Path> paths = Files.walk(Paths.get(dir.cont))) {
@@ -1431,10 +1433,18 @@ static class BlogFileSys implements FileSys {
 
     @Override
     public boolean saveOverwriteFile(Dir dir, String fn, String cont) {
-        // Target dir must exist
         Path targetOsPath = Paths.get(dir.cont);
         File targetOsDir = new File(targetOsPath.toString());
-        if (!targetOsDir.exists() || !Files.isDirectory(targetOsPath)) {
+        if (!targetOsDir.exists()) {
+            try  {
+                Files.createDirectories(targetOsPath);
+            } catch (IOException e) {
+                e.printStackTrace();
+                return false; 
+            }
+        }
+        if (!Files.isDirectory(targetOsPath)) {
+            System.out.println("here"); 
             return false;
         }
         Path targetPath = Paths.get(dir.cont, fn);
@@ -1514,7 +1524,6 @@ static class BlogFileSys implements FileSys {
     }
 }
 
-//}}}
 //}}}
 //{{{ Main
 
