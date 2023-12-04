@@ -179,16 +179,8 @@ function strafe(indStrafe) {
     populateMenu(false)
 }
 
-function reorderTemporal() {
-    modeTemp = true;
-    clearLocation();
-    populateMenu(false);
-}
-
-function reorderThematic() {
-    modeTemp = false
-    clearLocation()
-    populateMenu(false)
+function toggleTheme() {
+    
 }
 
 function clearLocation() {
@@ -225,8 +217,7 @@ function tryLogin() {
 
 document.addEventListener(`DOMContentLoaded`, () => {
     document.getElementById(`_divider`).addEventListener(`click`, toggleNavBar)
-    document.getElementById(`_reorderTemporal`).addEventListener(`click`, reorderTemporal)
-    document.getElementById(`_reorderThematic`).addEventListener(`click`, reorderThematic)
+    document.getElementById(`_toggleTheme`).addEventListener(`click`, toggleTheme)
     document.getElementById(`_menuToggler`).addEventListener(`click`, toggleNavBar)
 
     populateMenu(true)
