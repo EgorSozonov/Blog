@@ -4,8 +4,7 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 obj/*
-node_modules/*
-
+*.png
 tags
 
 *.xz

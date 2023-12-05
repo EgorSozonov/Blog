@@ -1,3 +1,4 @@
 rm -rf /var/www/blog/*
 cp -r ~/web/testBlog/* /var/www/blogIngest 
 cp ~/projects/blog/web/* /var/www/blog 
+java src/Blog.java

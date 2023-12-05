@@ -187,8 +187,10 @@ LocalFiles moveAndReadLocalFiles(L<FileInfo> inFiles, Dir inSourceDir, Dir inTar
         if (fInfo.name.equals("i.html")) {
             continue;
         }
+        print("inFile: " + fInfo.name); 
         UnvName fn = new UnvName(fInfo.name);
         String newVersion = makeNameBumpedVersion(fn, existingFiles);
+        print("new version " + newVersion + " to be moved to " + inTargetDir.cont); 
         fs.moveFileWithRename(inSourceDir, fInfo.name, inTargetDir, newVersion);
         //result.versions.put(fn, newVersion);
     }
@@ -389,6 +391,8 @@ static L<Substitution> parseSrcAttribs(String html, String tag) {
         int indSrc = html.indexOf("src=\"", ind) + 5;
         int indEndSrc = html.indexOf("\"", indSrc); // 5 for the `src="`
         String attrib = html.substring(indSrc, indEndSrc);
+        print("attrib:"); 
+        print(attrib); 
         result.add(new Substitution(indSrc, indEndSrc, attrib));
         ind = html.indexOf(opener, ind + 1);
     }
@@ -1433,18 +1437,8 @@ static class BlogFileSys implements FileSys {
 
     @Override
     public boolean saveOverwriteFile(Dir dir, String fn, String cont) {
-        Path targetOsPath = Paths.get(dir.cont);
-        File targetOsDir = new File(targetOsPath.toString());
-        if (!targetOsDir.exists()) {
-            try  {
-                Files.createDirectories(targetOsPath);
-            } catch (IOException e) {
-                e.printStackTrace();
-                return false; 
-            }
-        }
+        Path targetOsPath = tryCreateMissingDir(dir); 
         if (!Files.isDirectory(targetOsPath)) {
-            System.out.println("here"); 
             return false;
         }
         Path targetPath = Paths.get(dir.cont, fn);
@@ -1462,6 +1456,21 @@ static class BlogFileSys implements FileSys {
         }
         return true;
     }
+    
+    
+    private Path tryCreateMissingDir(Dir dir)  {
+        Path targetOsPath = Paths.get(dir.cont);
+        File targetOsDir = new File(targetOsPath.toString());
+        if (!targetOsDir.exists()) {
+            try  {
+                Files.createDirectories(targetOsPath);
+            } catch (IOException e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
+        return targetOsPath;
+    }
 
 
     @Override
@@ -1474,13 +1483,16 @@ static class BlogFileSys implements FileSys {
         }
         Path targetOsPath = Paths.get(targetDir.cont);
         File targetOsDir = new File(targetOsPath.toString());
+        tryCreateMissingDir(targetDir);
         if (!targetOsDir.exists() || !Files.isDirectory(targetOsPath)) {
+            print("p2"); 
             return false;
         }
         Path targetPath = Paths.get(targetDir.cont, newName);
         File targetFile = new File(targetPath.toString());
         if (targetFile.exists()) {
             if (targetFile.isDirectory()) {
+                print("p3"); 
                 return false;
             }
             targetFile.delete();
