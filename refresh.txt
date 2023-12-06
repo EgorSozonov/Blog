@@ -1,4 +1,4 @@
-rm -rf /var/www/blog/*
+rm -rf /var/www/blog/blog/*
 cp -r ~/web/testBlog/* /var/www/blogIngest 
-cp ~/projects/blog/web/* /var/www/blog 
+cp ~/projects/blog/web/* /var/www/blog/blog
 java src/Blog.java

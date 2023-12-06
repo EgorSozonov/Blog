@@ -27,7 +27,7 @@ body {
     overflow-y: scroll;
 }
 
-@media screen and (max-width: 800px) {
+@media only screen and (max-width: 800px) {
     ._navbar {
         flex-grow: 100;
     }
@@ -41,7 +41,7 @@ body {
     }
 }
 
-@media screen and (min-width: 801px) {
+@media only screen and (min-width: 801px) {
     body {
         font-size: 14px;
     }
@@ -97,21 +97,21 @@ body {
 }
 
 @keyframes fade-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
 }
 
 @keyframes fade-out {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
 }
 
 #_theMenu {
@@ -124,7 +124,7 @@ body {
 }
 
 ._opaque {
-  animation: fade-in 0.6s;
+    animation: fade-in 0.6s;
 }
 
 ._hidden {
@@ -140,16 +140,6 @@ body {
     border-width: 1px;
 }
 
-#_menuOpener {
-    left: 20px;
-    display: none;
-}
-
-#_menuCloser {
-    left: 280px;
-    display: close;
-}
-
 svg {
     stroke: currentColor;
     stroke-width: 4;
@@ -162,7 +152,7 @@ svg {
 }
 
 ._swell:hover {
-  transform: scale(1.2);
+    transform: scale(1.2);
 }
 
 p {

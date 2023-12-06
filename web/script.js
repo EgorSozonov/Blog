@@ -77,36 +77,35 @@ function populateMenu(isFirstLoad) {
     }
 
     if (nameUp.length > 0) {
-        const divUp = document.createElement('div')
-        const linkUp = document.createElement('a')
-        linkUp.setAttribute('href', '#')
-        linkUp.addEventListener('click', () => moveUp((leafMode === true ? 2 : 1)))
+        const divUp = document.createElement(`div`)
+        const linkUp = document.createElement(`a`)
+        linkUp.setAttribute(`href`, `#`)
+        linkUp.addEventListener(`click`, () => moveUp((leafMode === true ? 2 : 1)))
         linkUp.innerHTML = `^ ` + nameUp
         divUp.appendChild(linkUp)
         cont.appendChild(divUp)
     }
 
     for (let i = 0; i < listOpen.length; ++i) {
-        const cParent = document.createElement('div')
-        const link = document.createElement('a')
+        const cParent = document.createElement(`div`)
+        const link = document.createElement(`a`)
         if (listOpen[i][1].length == 0) {
             if (i == indLast && leafMode === true) {
-                let child = document.createElement('div')
+                let child = document.createElement(`div`)
                 child.style.border = `1px solid hsl(75, 100%, 50%)`
                 const displayedName = displayLeaf(listOpen[i][0])
-                let par = document.createElement('p')
+                let par = document.createElement(`p`)
                 par.innerHTML = displayedName
                 child.appendChild(par)
                 cont.appendChild(child)
             } else {
-                link.setAttribute('href', '#')
-                link.addEventListener('click', () => goToPage(homePath + listOpen[i][0] + (modeTemp ?
-                `?temp` : ``)))
+                link.setAttribute(`href`, `#`)
+                link.addEventListener(`click`, () => goToPage(homePath + listOpen[i][0]))
                 link.innerHTML = displayLeaf(listOpen[i][0])
             }
         } else {
-            link.setAttribute('href', '#')
-            link.addEventListener('click', () => (leafMode === true ? strafe(i) : moveDown(i)))
+            link.setAttribute(`href`, `#`)
+            link.addEventListener(`click`, () => (leafMode === true ? strafe(i) : moveDown(i)))
             link.innerHTML = `[` + listOpen[i][0] + `]`
         }
         cParent.appendChild(link)
@@ -217,7 +216,7 @@ function tryLogin() {
 
 document.addEventListener(`DOMContentLoaded`, () => {
     document.getElementById(`_divider`).addEventListener(`click`, toggleNavBar)
-    document.getElementById(`_toggleTheme`).addEventListener(`click`, toggleTheme)
+    document.getElementById(`_themeToggler`).addEventListener(`click`, toggleTheme)
     document.getElementById(`_menuToggler`).addEventListener(`click`, toggleNavBar)
 
     populateMenu(true)

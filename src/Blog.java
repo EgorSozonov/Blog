@@ -35,7 +35,7 @@ class Blog {
 //{{{ Constants
 
 static final Dir webRoot = Dir.ofString("/var/www");
-static final Dir blogDir = new Dir(webRoot, new Subfolder("blog"));
+static final Dir blogDir = new Dir(webRoot, new Subfolder("blog/blog"));
 static final Dir ingestDir = new Dir(webRoot, new Subfolder("blogIngest"));
 
 static final String appSuburl = "blog/"; // The URL prefix
@@ -62,6 +62,8 @@ String todayDt = "";
 static final String stampOpen = "<!-- Dates -->";
 static final String stampClose = "<!-- / -->";
 static final String stampTemplate = "<div id=\"_dtSt\">Created: $created, updated: $updated</div>";
+static final String stampShortTemplate = "<div id=\"_dtSt\">Created: $created</div>";
+// must have the same "div" prefix as stampTemplate
 
 public Blog(FileSys fs)  {
     this.fs = fs;
@@ -115,13 +117,6 @@ void ingestCore() {
 }
 
 void ingestDocs() {
-    // determine the 4 lists
-    // calculate the nav trees
-    // create new docs
-    // update changing docs local files
-    // update changing docs
-    // delete old local files
-    // delete the to-delete docs
     Ingestion ing = buildIngestion();
     createUpdateDocs(ing, false); // create docs
     createUpdateDocs(ing, true); // update docs
@@ -187,10 +182,10 @@ LocalFiles moveAndReadLocalFiles(L<FileInfo> inFiles, Dir inSourceDir, Dir inTar
         if (fInfo.name.equals("i.html")) {
             continue;
         }
-        print("inFile: " + fInfo.name); 
+        print("inFile: " + fInfo.name);
         UnvName fn = new UnvName(fInfo.name);
         String newVersion = makeNameBumpedVersion(fn, existingFiles);
-        print("new version " + newVersion + " to be moved to " + inTargetDir.cont); 
+        print("new version " + newVersion + " to be moved to " + inTargetDir.cont);
         fs.moveFileWithRename(inSourceDir, fInfo.name, inTargetDir, newVersion);
         //result.versions.put(fn, newVersion);
     }
@@ -275,11 +270,11 @@ void buildHead(String localScriptName, L<String> globalScripts, Subfolder subf, 
 void buildNavPart(String navTree, Subfolder subf, StringBuilder result) {
     result.append("""
         <script type="application/json" id="_navState">{
-            address:""");
+            "address":""");
     result.append(" \"");
     result.append(subf.cont);
     result.append("\",\n");
-    result.append("    nav: [\n");
+    result.append("    \"nav\": [\n");
     result.append(navTree);
     result.append("\n    ]\n");
     result.append("}</script>");
@@ -322,6 +317,9 @@ static void buildContent(String content, L<Substitution> subs, StringBuilder res
 
 
 static String buildDateStamp(String createdDt, String updatedDt) {
+    if (createdDt.equals(updatedDt)) {
+        return stampOpen + stampShortTemplate.replace("$created", createdDt) + stampClose;
+    }
     return stampOpen
         + stampTemplate.replace("$created", createdDt).replace("$updated", updatedDt)
         + stampClose;
@@ -391,8 +389,8 @@ static L<Substitution> parseSrcAttribs(String html, String tag) {
         int indSrc = html.indexOf("src=\"", ind) + 5;
         int indEndSrc = html.indexOf("\"", indSrc); // 5 for the `src="`
         String attrib = html.substring(indSrc, indEndSrc);
-        print("attrib:"); 
-        print(attrib); 
+        print("attrib:");
+        print(attrib);
         result.add(new Substitution(indSrc, indEndSrc, attrib));
         ind = html.indexOf(opener, ind + 1);
     }
@@ -412,12 +410,9 @@ static String parseCreatedDate(String old) {
 void createUpdateDocs(Ingestion ing, boolean isUpdate) {
     L<CreateUpdate> cus = (isUpdate) ? ing.updateDocs : ing.createDocs;
     for (CreateUpdate cu : cus) {
-        print("isUpdate = " + isUpdate);
-        print(cu.newContent);
         Dir targetDir = new Dir(blogDir, cu.targetDir);
 
         String oldContent = isUpdate ? fs.readTextFile(targetDir, "i.html") : "";
-
         String freshContent = buildDocument(cu, oldContent, todayDt, ing);
         fs.saveOverwriteFile(new Dir(blogDir, cu.targetDir), "i.html", freshContent);
 
@@ -698,7 +693,7 @@ static final String templateHtmlStart = """
 <html>
 <head>
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; script-src 'self'; base-uri 'self';" />
+          content="default-src 'self'; script-src 'self'; base-uri 'self';" />
     <link rel="icon" type="image/x-icon" href="/blog/favicon.ico"/>
 """;
 
@@ -708,9 +703,9 @@ static final String templateBodyStart = """
 <div class="_wrapper">
 <div class="_navbar" id="_theNavBar">
     <div class="_menuTop">
-        <div class="_svgButton" title="Temporal sorting">
-            <a id="_reorderTemporal" title="Temporal sorting">
-                <svg id="_sorterTemp" class="_swell" width="30" height="30" viewBox="0 0 100 100">
+        <div class="_svgButton" title="Toggle theme">
+            <a id="_themeToggle" title="Toggle theme">
+                <svg id="_themeToggler" class="_swell" width="30" height="30" viewBox="0 0 100 100">
                     <circle r="48" cx="50" cy="50" />
                     <path d="M 35 20 h 30 c 0 30 -30 30 -30 60 h 30
                              c 0 -30 -30 -30 -30 -60" />
@@ -751,7 +746,7 @@ static final String templateBodyStart = """
 
 static final String templateEnd = """
 <div class="_footer">© Egor Sozonov | <a href="https://sozonov.site">Home</a> |
-    <a href="/blog/TermsOfUse">Terms of use</a>
+    <a href="/blog/termsOfUse.html">Terms of use</a>
 </div>
 </div>
 </div>
@@ -1369,7 +1364,7 @@ static class BlogFileSys implements FileSys {
     @Override
     public L<FileInfo> listFiles(Dir dir) {
         var result = new L();
-        var files0 = new File(dir.cont).listFiles(); 
+        var files0 = new File(dir.cont).listFiles();
         if (files0 == null) {
             return result;
         }
@@ -1437,7 +1432,7 @@ static class BlogFileSys implements FileSys {
 
     @Override
     public boolean saveOverwriteFile(Dir dir, String fn, String cont) {
-        Path targetOsPath = tryCreateMissingDir(dir); 
+        Path targetOsPath = tryCreateMissingDir(dir);
         if (!Files.isDirectory(targetOsPath)) {
             return false;
         }
@@ -1456,8 +1451,8 @@ static class BlogFileSys implements FileSys {
         }
         return true;
     }
-    
-    
+
+
     private Path tryCreateMissingDir(Dir dir)  {
         Path targetOsPath = Paths.get(dir.cont);
         File targetOsDir = new File(targetOsPath.toString());
@@ -1485,14 +1480,14 @@ static class BlogFileSys implements FileSys {
         File targetOsDir = new File(targetOsPath.toString());
         tryCreateMissingDir(targetDir);
         if (!targetOsDir.exists() || !Files.isDirectory(targetOsPath)) {
-            print("p2"); 
+            print("p2");
             return false;
         }
         Path targetPath = Paths.get(targetDir.cont, newName);
         File targetFile = new File(targetPath.toString());
         if (targetFile.exists()) {
             if (targetFile.isDirectory()) {
-                print("p3"); 
+                print("p3");
                 return false;
             }
             targetFile.delete();
