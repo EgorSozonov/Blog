@@ -171,11 +171,10 @@ Ingestion buildIngestion() {
 
 
 LocalFiles moveAndReadLocalFiles(L<FileInfo> inFiles, Dir inSourceDir, Dir inTargetDir) {
-    /// Moves all local files (except of cource the `i.html`) to target dir and determines
+    /// Moves all local files (except of course the `i.html`) to target dir and determines
     /// their new filenames
     LocalFiles result = new LocalFiles();
-    Map<UnvName, Tu<Integer, L<String>>> versions = new HashMap();
-    // fn -> (maxEncounteredVersion deleteList)
+    Map<UnvName, Integer> maxVersions = new HashMap();
 
     var existingFiles = fs.listFiles(inTargetDir);
     for (var fInfo : inFiles) {
@@ -187,28 +186,26 @@ LocalFiles moveAndReadLocalFiles(L<FileInfo> inFiles, Dir inSourceDir, Dir inTar
         String newVersion = makeNameBumpedVersion(fn, existingFiles);
         print("new version " + newVersion + " to be moved to " + inTargetDir.cont);
         fs.moveFileWithRename(inSourceDir, fInfo.name, inTargetDir, newVersion);
-        //result.versions.put(fn, newVersion);
     }
     existingFiles = fs.listFiles(inTargetDir).filter(x -> !x.name.equals("i.html"));
     for (var f : existingFiles) {
         UnvName unvName = new UnvName(f.name);
         int version = getFileVersion(f.name);
-        if (versions.containsKey(unvName)) {
-            Tu<Integer, L<String>> v = versions.get(unvName);
-            if (version > v.f1) {
-                v.f1 = version;
-                v.f2.add(result.versions.get(unvName));
-                result.versions.put(unvName, f.name);
+        if (maxVersions.containsKey(unvName))  {
+            if (version > maxVersions.get(unvName)) {
+                print("new max version " + version + " instead of " + maxVersions.get(unvName)); 
+                result.filesToDelete.add(result.versions.get(unvName));
+                result.versions.put(unvName, f.name); 
+                maxVersions.put(unvName, version);
             } else {
-                v.f2.add(f.name);
+                result.filesToDelete.add(f.name);
+                print("planning to delete " + f.name); 
             }
         } else {
-            versions.put(unvName, new Tu(version, new L()));
-            result.versions.put(unvName, f.name);
+            maxVersions.put(unvName, version);
+            result.versions.put(unvName, f.name); 
+            print("new version " + version + "  for " + unvName.cont); 
         }
-    }
-    for (Tu<Integer, L<String>> v : versions.values()) {
-        result.filesToDelete.append(v.f2);
     }
     return result;
 }
@@ -339,15 +336,18 @@ String parseHead(String old, Dir targetDir, /* out */ L<String> globalCoreScript
         if (!scrName.endsWith(".js")) {
             throw new RuntimeException("Script extension must be .js!");
         }
-        if (scrName.startsWith("../")) {
-            globalCoreScripts.add(shaveOffExtension(scrName.substring(3))); // 3 for the `../`
+        if (scrName.startsWith("/" + appSuburl)) {
+            globalCoreScripts.add(shaveOffExtension(
+                        scrName.substring(appSuburl.length() + 1))
+            );
         } else if (scrName.equals("local.js")) {
             var existingFiles = fs.listFiles(targetDir);
             L<String> existingLocals = getNamesWithPrefix(new UnvName("local.js"), existingFiles);
             localScriptName = getNameWithMaxVersion(existingLocals).f1;
         } else {
             throw new
-                RuntimeException("Scripts must either start with `../` or be named `local.js`!");
+                RuntimeException("Scripts must either start with `/" + appSuburl 
+                        + "` or be named `local.js`!");
         }
     }
     return localScriptName;
@@ -387,6 +387,10 @@ static L<Substitution> parseSrcAttribs(String html, String tag) {
             throw new RuntimeException("Unclosed tag in the HTML");
         }
         int indSrc = html.indexOf("src=\"", ind) + 5;
+        if (indSrc < 5)  {
+            ind = html.indexOf(opener, ind + 1);
+            continue; // a <script> with no src, for example JSON
+        }
         int indEndSrc = html.indexOf("\"", indSrc); // 5 for the `src="`
         String attrib = html.substring(indSrc, indEndSrc);
         print("attrib:");
@@ -745,7 +749,7 @@ static final String templateBodyStart = """
 
 
 static final String templateEnd = """
-<div class="_footer">© Egor Sozonov | <a href="https://sozonov.site">Home</a> |
+<div class="_footer">© Egorr Sozonov | <a href="https://sozonov.site">Home</a> |
     <a href="/blog/termsOfUse.html">Terms of use</a>
 </div>
 </div>
