@@ -73,14 +73,18 @@ public Blog(FileSys fs)  {
 }
 
 void run() {
-    ingestCore();
-    ingestDocs();
+    try {
+        boolean coreIsUpdated = ingestCore();
+        ingestDocs(coreIsUpdated);
+    } catch (Exception e) {
+        e.printStackTrace();
+    }
 }
 
-void ingestCore() {
-    /// Ingest the core files
+boolean ingestCore() {
+    /// Ingest the core files. Return true iff there were any updates to the core files
     if (!fs.dirExists(ingestDir))  {
-        return;
+        return false;
     }
     var inFiles = fs.listFiles(ingestDir);
     var existingFiles = fs.listFiles(blogDir);
@@ -108,23 +112,25 @@ void ingestCore() {
             L<String> existingNames =
                     getNamesWithPrefix(new UnvName(fixedCoreFiles[i]), existingFiles);
             if (existingNames.size() == 0)  {
-                print("Error, no core fixed file found for " + fixedCoreFiles[i]);
-                return;
+                throw new RuntimeException(
+                    "Error, no core fixed file found for " + fixedCoreFiles[i]);
+                return false;
             }
             coreVersions[i] = getNameWithMaxVersion(existingNames).f1;
         }
     }
+    return inFiles.size() > 0;
 }
 
-void ingestDocs() {
-    Ingestion ing = buildIngestion();
+void ingestDocs(boolean coreIsUpdated) {
+    Ingestion ing = buildIngestion(coreIsUpdated);
     createUpdateDocs(ing, false); // create docs
     createUpdateDocs(ing, true); // update docs
     deleteDocs(ing);
 }
 
 
-Ingestion buildIngestion() {
+Ingestion buildIngestion(boolean coreIsUpdated) {
     /// Moves the local files and builds the full document lists
     Ingestion ing = new Ingestion();
     Set<Subfolder> oldDirs = fs.listSubfoldersContaining(blogDir, "i.html").toSet();
@@ -139,8 +145,8 @@ Ingestion buildIngestion() {
 
         String newContent = "";
         var inFiles = fs.listFiles(inSourceDir);
-        int mbIndex = inFiles.findIndex(x -> x.name.equals("i.html"));
-        if (mbIndex > -1) {
+        int mbHtmlInd = inFiles.findIndex(x -> x.name.equals("i.html"));
+        if (mbHtmlInd > -1) {
             newContent = fs.readTextFile(inSourceDir, "i.html");
 
             if (newContent.length() <= 1) {
@@ -150,19 +156,28 @@ Ingestion buildIngestion() {
             }
         }
         LocalFiles localFiles = moveAndReadLocalFiles(inFiles, inSourceDir, inTargetDir);
+        
         if (oldDirs.contains(inTargetSubf)) {
-            if (mbIndex > -1) {
+            if (mbHtmlInd > -1) {
                 newContent = fs.readTextFile(inSourceDir, "i.html");
                 ing.updateDocs.add(
-                        new CreateUpdate(inSourceSubf, inTargetSubf, localFiles, newContent));
+                    new CreateUpdate(inSourceSubf, inTargetSubf, localFiles, newContent));
             } else {
-                ing.updateDocs.add(new CreateUpdate(inSourceSubf, inTargetSubf, localFiles));
+                ing.updateDocs.add(
+                    new CreateUpdate(inSourceSubf, inTargetSubf, localFiles, true));
             }
             ing.allDocs.add(new Doc(inTargetSubf));
-        } else if (mbIndex > -1) {
+        } else if (mbHtmlInd > -1) {
             ing.createDocs.add(
-                    new CreateUpdate(inSourceSubf, inTargetSubf, localFiles, newContent));
+                new CreateUpdate(inSourceSubf, inTargetSubf, localFiles, newContent));
             ing.allDocs.add(new Doc(inTargetSubf));
+        }
+    }
+    if (coreIsUpdated) {
+        for (Subfolder old : oldDirs)  {
+            if (!targetDirs.contains(old)) {
+                ing.updateDocs.add(new CreateUpdate(null, old, null, false));
+            }
         }
     }
     ing.finalize();
@@ -223,17 +238,11 @@ String buildDocument(CreateUpdate createUpdate, String old, String updatedDt, In
         mainSource = old;
         isOld = true;
     }
-    print("isOld = " + isOld);
     L<String> globalScripts = new L();
 
     String content = extractContent(mainSource, isOld);
-    String createdDt = "";
-    if (old == "") {
-        createdDt = updatedDt;
-    } else {
-        createdDt = parseCreatedDate(old);
-    }
-    String dateStamp = buildDateStamp(createdDt, updatedDt);
+    String dateStamp = buildDateStamp(old, createUpdate.bumpTheDate, updatedDt);
+    print("built the datestamp: " + dateStamp); 
     String localScriptName =
             parseHead(mainSource, new Dir(blogDir, createUpdate.targetDir), globalScripts);
     L<Substitution> subs = parseBodySubstitutions(content, dateStamp, createUpdate.localFiles);
@@ -242,6 +251,28 @@ String buildDocument(CreateUpdate createUpdate, String old, String updatedDt, In
     buildHead(localScriptName, globalScripts, createUpdate.targetDir, ing, result);
     buildBody(content, subs, result);
     return result.toString();
+}
+
+
+String buildDateStamp(String old, boolean bumpTheDate, String updatedDt) {
+    if (!bumpTheDate) { // Just the core files were updated, the doc itself wasn't
+        int indStart = old.indexOf(stampOpen);
+        int indEnd = old.indexOf(stampClose);
+        return old.substring(indStart, indEnd - indStart + stampClose.length);
+    }
+    String createdDt = "";
+    if (old == "") {
+        createdDt = updatedDt;
+    } else {
+        createdDt = parseCreatedDate(old);
+    }
+    
+    if (createdDt.equals(updatedDt)) {
+        return stampOpen + stampShortTemplate.replace("$created", createdDt) + stampClose;
+    }
+    return stampOpen
+        + stampTemplate.replace("$created", createdDt).replace("$updated", updatedDt)
+        + stampClose;
 }
 
 
@@ -313,16 +344,6 @@ static void buildContent(String content, L<Substitution> subs, StringBuilder res
 }
 
 
-static String buildDateStamp(String createdDt, String updatedDt) {
-    if (createdDt.equals(updatedDt)) {
-        return stampOpen + stampShortTemplate.replace("$created", createdDt) + stampClose;
-    }
-    return stampOpen
-        + stampTemplate.replace("$created", createdDt).replace("$updated", updatedDt)
-        + stampClose;
-}
-
-
 String parseHead(String old, Dir targetDir, /* out */ L<String> globalCoreScripts) {
     /// Parses the <head> tag of the old HTML and determines if it has the local script "local.js"
     /// as well as the list of core extra scripts this document requires
@@ -369,6 +390,7 @@ static L<Substitution> parseBodySubstitutions(String body, String dateStamp,
         result.add(new Substitution(indStampOpen, indStampClose + stampClose.length(), dateStamp));
     }
     var existingAttribs = parseSrcAttribs(body, "img");
+    print("373" + localFiles); 
     result.append(existingAttribs.trans(x ->
             new Substitution(x.startByte, x.endByte,
                     localFiles.versions.get(new UnvName(x.text)))));
@@ -582,6 +604,7 @@ static class LocalFiles {
     L<String> filesToDelete = new L();
 }
 
+
 static class CreateUpdate {
     Subfolder sourceDir; // source dir like `a.b.c`
     Subfolder targetDir; // target dir like `a/b/c`
@@ -589,11 +612,13 @@ static class CreateUpdate {
     LocalFiles localFiles; // map from prefix to full filename for local files
     boolean bumpTheDate; // should we bump the updated date? we shouldn't for global file updates
 
-    public CreateUpdate(Subfolder sourceDir, Subfolder targetDir, LocalFiles localFiles)  {
+    public CreateUpdate(Subfolder sourceDir, Subfolder targetDir, LocalFiles localFiles,
+            boolean bumpTheDate)  {
         this.sourceDir = sourceDir;
         this.targetDir = targetDir;
         this.newContent = "";
-        localFiles = localFiles;
+        this.localFiles = localFiles;
+        this.bumpTheDate = bumpTheDate;
     }
 
     public CreateUpdate(Subfolder sourceDir, Subfolder targetDir, LocalFiles localFiles,
@@ -602,6 +627,7 @@ static class CreateUpdate {
         this.targetDir = targetDir;
         this.newContent = newContent;
         this.localFiles = localFiles;
+        this.bumpTheDate = false; 
     }
 }
 
