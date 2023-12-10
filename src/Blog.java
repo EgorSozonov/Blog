@@ -38,7 +38,7 @@ static final Dir webRoot = Dir.ofString("/var/www");
 static final Dir blogDir = new Dir(webRoot, new Subfolder("blog/blog"));
 static final Dir ingestDir = new Dir(webRoot, new Subfolder("blogIngest"));
 
-static final String appSuburl = "blog/"; // The URL prefix
+static final String appSuburl = "/blog/"; // The URL prefix
 static final String contentStartMarker = "<div id=\"_content\">\n";
 static final String contentEndMarker = "<!-- _contentEnd -->\n";
 
@@ -114,7 +114,6 @@ boolean ingestCore() {
             if (existingNames.size() == 0)  {
                 throw new RuntimeException(
                     "Error, no core fixed file found for " + fixedCoreFiles[i]);
-                return false;
             }
             coreVersions[i] = getNameWithMaxVersion(existingNames).f1;
         }
@@ -176,7 +175,8 @@ Ingestion buildIngestion(boolean coreIsUpdated) {
     if (coreIsUpdated) {
         for (Subfolder old : oldDirs)  {
             if (!targetDirs.contains(old)) {
-                ing.updateDocs.add(new CreateUpdate(null, old, null, false));
+                print("adding an update because of core: " + old.cont); 
+                ing.updateDocs.add(new CreateUpdate(null, old, new LocalFiles(), false));
             }
         }
     }
@@ -244,7 +244,7 @@ String buildDocument(CreateUpdate createUpdate, String old, String updatedDt, In
     String dateStamp = buildDateStamp(old, createUpdate.bumpTheDate, updatedDt);
     print("built the datestamp: " + dateStamp); 
     String localScriptName =
-            parseHead(mainSource, new Dir(blogDir, createUpdate.targetDir), globalScripts);
+            parseHead(mainSource, new Dir(blogDir, createUpdate.targetDir), isOld, globalScripts);
     L<Substitution> subs = parseBodySubstitutions(content, dateStamp, createUpdate.localFiles);
 
     var result = new StringBuilder();
@@ -258,7 +258,7 @@ String buildDateStamp(String old, boolean bumpTheDate, String updatedDt) {
     if (!bumpTheDate) { // Just the core files were updated, the doc itself wasn't
         int indStart = old.indexOf(stampOpen);
         int indEnd = old.indexOf(stampClose);
-        return old.substring(indStart, indEnd - indStart + stampClose.length);
+        return old.substring(indStart, indEnd + stampClose.length());
     }
     String createdDt = "";
     if (old == "") {
@@ -279,7 +279,9 @@ String buildDateStamp(String old, boolean bumpTheDate, String updatedDt) {
 void buildHead(String localScriptName, L<String> globalScripts, Subfolder subf, Ingestion ing,
                StringBuilder result) {
     result.append(templateHtmlStart);
-    result.append("    <script type=\"text/javascript\" src=\"/blog/script.js\"></script>\n");
+    result.append("    <script type=\"text/javascript\" src=\"");
+    result.append(appSuburl + coreVersions[indexOf(fixedCoreFiles, "script.js")]);
+    result.append("\"></script>\n");
     for (String gs : globalScripts) {
         if (globalVersions.containsKey(gs)) {
             result.append("    <script type=\"text/javascript\" src=\"/blog/"
@@ -290,7 +292,9 @@ void buildHead(String localScriptName, L<String> globalScripts, Subfolder subf, 
         result.append("    <script type=\"text/javascript\" src=\"" + localScriptName
                 + "\"></script>\n");
     }
-    result.append("    <link rel=\"stylesheet\" href=\"/blog/style.css\" />\n");
+    result.append("    <link rel=\"stylesheet\" href=\"");
+    result.append(appSuburl + coreVersions[indexOf(fixedCoreFiles, "style.css")]);
+    result.append("\" />\n");
     buildNavPart(ing.navPart, subf, result);
     result.append("\n</head>\n");
 }
@@ -344,31 +348,34 @@ static void buildContent(String content, L<Substitution> subs, StringBuilder res
 }
 
 
-String parseHead(String old, Dir targetDir, /* out */ L<String> globalCoreScripts) {
-    /// Parses the <head> tag of the old HTML and determines if it has the local script "local.js"
-    /// as well as the list of core extra scripts this document requires
+String parseHead(String html, Dir targetDir, boolean isOld, /* out */ L<String> globalCoreScripts) {
+    /// Parses the <head> tag of the HTML and determines if it has the local script "local.js"
+    /// as well as a list of core extra scripts this document may require
     String localScriptName = "";
-    int start = old.indexOf("<head>");
-    int end = old.indexOf("</head>");
-    String head = old.substring(start + 6, end);
+    int start = html.indexOf("<head>");
+    int end = html.indexOf("</head>");
+    String head = html.substring(start + 6, end);
     L<Substitution> scripts = parseSrcAttribs(head, "script");
     for (var script : scripts) {
         String scrName = script.text;
         if (!scrName.endsWith(".js")) {
             throw new RuntimeException("Script extension must be .js!");
         }
-        if (scrName.startsWith("/" + appSuburl)) {
-            globalCoreScripts.add(shaveOffExtension(
-                        scrName.substring(appSuburl.length() + 1))
-            );
-        } else if (scrName.equals("local.js")) {
+        if (scrName.equals("local.js")) {
             var existingFiles = fs.listFiles(targetDir);
             L<String> existingLocals = getNamesWithPrefix(new UnvName("local.js"), existingFiles);
             localScriptName = getNameWithMaxVersion(existingLocals).f1;
         } else {
-            throw new
-                RuntimeException("Scripts must either start with `/" + appSuburl 
-                        + "` or be named `local.js`!");
+            if (isOld && scrName.startsWith(appSuburl)) {
+                globalCoreScripts.add(shaveOffExtension(scrName.substring(appSuburl.length())));
+            } else if (!isOld && scrName.startsWith("../")) {
+                globalCoreScripts.add(shaveOffExtension(scrName.substring(3)));
+            } else {
+                throw new
+                    RuntimeException("Scripts must either be named `local.js`, start with `../`" 
+                            + " for new/updated documents, or start with " + appSuburl + " for existing "
+                            + " unchanged docs, but was " + scrName + "!");
+            }
         }
     }
     return localScriptName;
@@ -390,7 +397,6 @@ static L<Substitution> parseBodySubstitutions(String body, String dateStamp,
         result.add(new Substitution(indStampOpen, indStampClose + stampClose.length(), dateStamp));
     }
     var existingAttribs = parseSrcAttribs(body, "img");
-    print("373" + localFiles); 
     result.append(existingAttribs.trans(x ->
             new Substitution(x.startByte, x.endByte,
                     localFiles.versions.get(new UnvName(x.text)))));
@@ -445,7 +451,9 @@ void createUpdateDocs(Ingestion ing, boolean isUpdate) {
         for (var localToDelete : cu.localFiles.filesToDelete) {
             fs.deleteIfExists(new Dir(blogDir, cu.targetDir), localToDelete);
         }
-        fs.deleteDirIfExists(new Dir(ingestDir, cu.sourceDir));
+        if (cu.sourceDir != null)  { // it's null iff the update is caused by a core file change
+            fs.deleteDirIfExists(new Dir(ingestDir, cu.sourceDir));
+        }
     }
 }
 
@@ -1272,6 +1280,15 @@ static L<String> getNamesWithPrefix(UnvName fn, L<FileInfo> existingFiles) {
             .transIf(x -> x.name.equals(fn.cont)
                             || (x.name.startsWith(fnWoExt) && x.name.endsWith(ext)),
                     y -> y.name);
+}
+
+static <T> int indexOf(T[] haystack, T needle)  {
+    for (int i = 0; i < haystack.length; i++) {
+        if (haystack[i].equals(needle)) {
+            return i;
+        }
+    }
+    return -1;
 }
 
 //}}}

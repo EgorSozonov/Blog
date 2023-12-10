@@ -1,1 +1,2 @@
-cp ~/web/cimg.png /var/www/blogIngest/c
+cp ~/web/script.js /var/www/blogIngest
+cp ~/web/style.css /var/www/blogIngest
