@@ -298,7 +298,8 @@ void buildHead(String localScriptName, L<String> globalScripts, Subfolder subf, 
     buildNavPart(ing.navPart, subf, result);
     result.append("\n</head>\n");
 }
-
+ 
+ 
 void buildNavPart(String navTree, Subfolder subf, StringBuilder result) {
     result.append("""
         <script type="application/json" id="_navState">{
@@ -635,7 +636,7 @@ static class CreateUpdate {
         this.targetDir = targetDir;
         this.newContent = newContent;
         this.localFiles = localFiles;
-        this.bumpTheDate = false; 
+        this.bumpTheDate = true; 
     }
 }
 
