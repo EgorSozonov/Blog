@@ -132,7 +132,7 @@ void ingestDocs(boolean coreIsUpdated) {
 Ingestion buildIngestion(boolean coreIsUpdated) {
     /// Moves the local files and builds the full document lists
     Ingestion ing = new Ingestion();
-    Set<Subfolder> oldDirs = fs.listSubfoldersContaining(blogDir, "i.html").toSet();
+    ing.allSubfs = fs.listSubfoldersContaining(blogDir, "i.html").toSet();
 
     L<Subfolder> ingestDirs = fs.listSubfolders(ingestDir);
     L<Subfolder> targetDirs = ingestDirs.trans(x -> convertToTargetDir(x));
@@ -156,7 +156,7 @@ Ingestion buildIngestion(boolean coreIsUpdated) {
         }
         LocalFiles localFiles = moveAndReadLocalFiles(inFiles, inSourceDir, inTargetDir);
         
-        if (oldDirs.contains(inTargetSubf)) {
+        if (ing.allSubfs.contains(inTargetSubf)) {
             if (mbHtmlInd > -1) {
                 newContent = fs.readTextFile(inSourceDir, "i.html");
                 ing.updateDocs.add(
@@ -165,15 +165,14 @@ Ingestion buildIngestion(boolean coreIsUpdated) {
                 ing.updateDocs.add(
                     new CreateUpdate(inSourceSubf, inTargetSubf, localFiles, true));
             }
-            ing.allDocs.add(new Doc(inTargetSubf));
         } else if (mbHtmlInd > -1) {
             ing.createDocs.add(
                 new CreateUpdate(inSourceSubf, inTargetSubf, localFiles, newContent));
-            ing.allDocs.add(new Doc(inTargetSubf));
+            ing.allSubfs.add(inTargetSubf);
         }
     }
     if (coreIsUpdated) {
-        for (Subfolder old : oldDirs)  {
+        for (Subfolder old : ing.allSubfs)  {
             if (!targetDirs.contains(old)) {
                 print("adding an update because of core: " + old.cont); 
                 ing.updateDocs.add(new CreateUpdate(null, old, new LocalFiles(), false));
@@ -367,9 +366,9 @@ String parseHead(String html, Dir targetDir, boolean isOld, /* out */ L<String> 
             L<String> existingLocals = getNamesWithPrefix(new UnvName("local.js"), existingFiles);
             localScriptName = getNameWithMaxVersion(existingLocals).f1;
         } else {
-            if (isOld && scrName.startsWith(appSuburl)) {
+            if (scrName.startsWith(appSuburl)) {
                 globalCoreScripts.add(shaveOffExtension(scrName.substring(appSuburl.length())));
-            } else if (!isOld && scrName.startsWith("../")) {
+            } else if (scrName.startsWith("../")) {
                 globalCoreScripts.add(shaveOffExtension(scrName.substring(3)));
             } else {
                 throw new
@@ -547,14 +546,14 @@ static class Ingestion {
     L<CreateUpdate> createDocs = new L();
     L<CreateUpdate> updateDocs = new L();
     L<Subfolder> deleteDocs = new L(); // list of dirs like `a/b/c`
-    L<Doc> allDocs = new L();
+    Set<Subfolder> allSubfs = new HashSet();
     NavTree nav;
     String navPart; // the navigation JSON embedded in <head>
 
     public void printOut() {
         print("Ingestion constructor, count of create " + createDocs.size()
                 + ", updateDocs count = " + updateDocs.size() + ", deleteDocs count = "
-                + deleteDocs.size() + ", allDirs = " + allDocs.size());
+                + deleteDocs.size() + ", allDirs = " + allSubfs.size());
     }
 
     public void finalize() {
@@ -563,6 +562,10 @@ static class Ingestion {
     }
 
     private NavTree buildThematic() {
+        L<Doc> allDocs = new L();
+        for (var a : allSubfs) {
+            allDocs.add(new Doc(a)); 
+        }
         Collections.sort(allDocs, (x, y) ->{
             int folderLengthCommon = Math.min(x.spl.size(), y.spl.size());
             for (int i = 0; i < folderLengthCommon; i++) {
@@ -588,7 +591,7 @@ static class Ingestion {
             int lenSamePrefix = Math.min(st.size() - 1, spl.size()) - 1;
             while (lenSamePrefix > -1
                     && !st.get(lenSamePrefix + 1).name.equals(spl.get(lenSamePrefix))) {
-                --lenSamePrefix;
+                lenSamePrefix -= 1;
             }
             for (int j = lenSamePrefix + 1; j < spl.size(); j++) {
                 var newElem = (j == spl.size() - 1)
